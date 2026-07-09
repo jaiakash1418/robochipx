@@ -92,8 +92,8 @@ async def get_stats():
 
 @router.post("/location/set")
 async def set_location(lat: Optional[float] = None, lon: Optional[float] = None):
-    simulation.set_custom_location(lat, lon)
-    return {"success": True, "lat": lat, "lon": lon}
+    await simulation.set_custom_location(lat, lon)
+    return {"success": True, "lat": lat, "lon": lon, "state": simulation._build_response()}
 
 
 @router.get("/weather/live")
@@ -138,7 +138,7 @@ async def demo_run(ticks: int = 10, lat: float = None, lon: float = None):
     simulation.reset()
     lat = lat or settings.default_lat
     lon = lon or settings.default_lon
-    simulation.set_custom_location(lat, lon)
+    await simulation.set_custom_location(lat, lon)
 
     # Fetch live weather
     try:

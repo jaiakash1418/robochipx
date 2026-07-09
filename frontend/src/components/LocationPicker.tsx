@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { MapPin, Crosshair, Globe, Navigation } from 'lucide-react';
 import { useSimulation } from '../context/SimulationContext';
-import { setBackendLocation } from '../api/endpoints';
 import InfoTooltip from './InfoTooltip';
 
 export default function LocationPicker() {
@@ -13,7 +12,6 @@ export default function LocationPicker() {
 
   const syncLocation = (lat: number, lon: number) => {
     setCustomLocation(lat, lon);
-    setBackendLocation(lat, lon);
     doFetchWeatherLive(lat, lon);
   };
 
@@ -57,7 +55,7 @@ export default function LocationPicker() {
       <div className="location-picker-header">
         <MapPin size={14} />
         <span>Location</span>
-        <InfoTooltip text="Set a custom location to fetch live weather data. The simulation grid stays in the SF Bay Area, but weather is fetched from your chosen coordinates." />
+        <InfoTooltip text="Set a custom location to generate terrain and fetch live weather. The simulation grid is ~1°×1° centered on your chosen point." />
       </div>
       <div className="location-picker-inputs">
         <input

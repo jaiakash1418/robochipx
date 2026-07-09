@@ -112,7 +112,7 @@ export const evaluateModel = async () => {
 
 export const setBackendLocation = async (lat?: number, lon?: number) => {
   if (await isUsingMock()) return { success: true, lat, lon };
-  return apiClient.post('/location/set', null, { params: { lat, lon } }).then((r) => r.data);
+  return apiClient.post<{ success: boolean; lat?: number; lon?: number; state?: TickResponse }>('/location/set', null, { params: { lat, lon } }).then((r) => r.data);
 };
 
 export const igniteBatch = async (cells: { x: number; y: number }[]) => {

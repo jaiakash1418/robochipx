@@ -1,6 +1,14 @@
 import json
-import numpy as np
+import math
+import urllib.error
+import urllib.parse
+import urllib.request
+from hashlib import md5
 from pathlib import Path
+
+import numpy as np
+from matplotlib.path import Path as MplPath
+from scipy.ndimage import gaussian_filter
 
 FUEL_TYPES = {
     "forest": 0,
@@ -17,22 +25,63 @@ CELL_STATES = {
     "burned": 2,
 }
 
+DEFAULT_LAT = 39.8283
+DEFAULT_LON = -98.5795
+
+# --- real-terrain settings -------------------------------------------------
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_TIMEOUT_S = 25
+METERS_PER_DEGREE_LAT = 111_320
+METERS_PER_CELL_DEFAULT = 100  # each grid cell covers ~100m x 100m on the ground
+
+# (osm_key, osm_value_or_None_for_any) -> fuel type, geometry kind.
+# Order matters: later entries are painted on top of earlier ones.
+OSM_LAYERS = [
+    (("landuse", "meadow"), "grass", "poly"),
+    (("landuse", "farmland"), "grass", "poly"),
+    (("natural", "grassland"), "grass", "poly"),
+    (("landuse", "grass"), "grass", "poly"),
+    (("natural", "wood"), "forest", "poly"),
+    (("landuse", "forest"), "forest", "poly"),
+    (("landuse", "residential"), "town", "poly"),
+    (("building", None), "town", "poly"),
+    (("natural", "water"), "water", "poly"),
+    (("waterway", None), "water", "line"),
+    (("power", "line"), "firebreak", "line"),
+    (("highway", None), "road", "line"),
+]
+
+PLACE_TAGS = {"city", "town", "village", "hamlet"}
+
 
 class Grid:
-    def __init__(self, size: int = 64):
+    def __init__(self, size: int = 64, meters_per_cell: float = METERS_PER_CELL_DEFAULT):
         self.size = size
+        self.meters_per_cell = meters_per_cell
         self.fuel_map: np.ndarray | None = None
         self.fire_mask: np.ndarray | None = None
         self.step: int = 0
         self.towns: list[dict] = []
+        # (south, west, north, east) lat/lon box the grid covers - needed to
+        # line up the grid with a Leaflet map (ImageOverlay / L.rectangle
+        # bounds, and to convert clicks to cells).
+        self.bounds: tuple[float, float, float, float] | None = None
         self._init_empty()
 
     def _init_empty(self):
         self.fuel_map = np.zeros((self.size, self.size), dtype=np.int8)
         self.fire_mask = np.zeros((self.size, self.size), dtype=np.int8)
         self.towns = []
+        self.step = 0
 
-    def load_fuel_map(self, path: str):
+    def _seed_from_location(self, lat: float, lon: float) -> int:
+        h = md5(f"{lat:.4f},{lon:.4f}".encode()).hexdigest()
+        return int(h[:8], 16)
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+    async def load_fuel_map(self, path: str, lat: float | None = None, lon: float | None = None):
         p = Path(path)
         if p.exists():
             with open(p) as f:
@@ -43,44 +92,371 @@ class Grid:
                 self.size = expected_size
                 self.fuel_map = loaded
                 self.towns = data.get("towns", [])
-            else:
-                self._init_empty()
-                self._generate_synthetic()
-                self.towns = data.get("towns", self.towns)
-            self.fire_mask = np.zeros((self.size, self.size), dtype=np.int8)
-        else:
-            self._init_empty()
-            self._generate_synthetic()
+                self.bounds = tuple(data["bounds"]) if data.get("bounds") else None
+                self.fire_mask = np.zeros((self.size, self.size), dtype=np.int8)
+                self.step = 0
+                return
+        await self.generate_terrain(
+            lat if lat is not None else DEFAULT_LAT,
+            lon if lon is not None else DEFAULT_LON,
+        )
 
-    def _generate_synthetic(self):
-        np.random.seed(42)
-        rng = np.random.default_rng(42)
+    def save_fuel_map(self, path: str):
+        with open(path, "w") as f:
+            json.dump(
+                {
+                    "size": self.size,
+                    "fuel_map": self.fuel_map.tolist(),
+                    "towns": self.towns,
+                    "bounds": list(self.bounds) if self.bounds else None,
+                },
+                f,
+            )
 
-        for i in range(self.size):
-            for j in range(self.size):
-                r = np.random.random()
-                if r < 0.5:
-                    self.fuel_map[i, j] = FUEL_TYPES["forest"]
-                elif r < 0.8:
-                    self.fuel_map[i, j] = FUEL_TYPES["grass"]
-                elif r < 0.85:
-                    self.fuel_map[i, j] = FUEL_TYPES["water"]
-                elif r < 0.95:
-                    self.fuel_map[i, j] = FUEL_TYPES["town"]
-                    self.towns.append({"x": int(i), "y": int(j), "name": f"Town {len(self.towns) + 1}"})
+    # ------------------------------------------------------------------
+    # Terrain generation
+    # ------------------------------------------------------------------
+    async def generate_terrain(self, lat: float, lon: float, use_real_data: bool = True):
+        """Build the fuel map for the area around (lat, lon).
+
+        Priority order:
+          1. OpenTopography elevation → base fuel (vegetation from real terrain)
+             + OSM features (water, roads, towns) overlaid on top
+          2. OSM alone (existing behavior)
+          3. Synthetic noise fallback
+        """
+        self._init_empty()
+        bounds = self._bbox_for(lat, lon)
+        self.bounds = bounds
+
+        elev_ok = False
+        osm_ok = False
+
+        if use_real_data:
+            from services.terrain import terrain_service
+
+            # 1. Try OpenTopography for base vegetation map
+            result = await terrain_service.generate(lat, lon, self.size, bounds)
+            if result and result["fuel_map"] is not None:
+                self.fuel_map = result["fuel_map"]
+                self.towns = result.get("towns", [])
+                elev_ok = True
+
+            # 2. Fetch OSM data and overlay features
+            osm_data = self._fetch_osm_data(bounds)
+            if osm_data and osm_data.get("elements"):
+                self._apply_osm_overlay(osm_data, bounds)
+                osm_ok = True
+
+        if not elev_ok and not osm_ok:
+            self._generate_terrain_synthetic(lat, lon)
+
+        self.fire_mask = np.zeros((self.size, self.size), dtype=np.int8)
+
+    # -- real terrain (OpenStreetMap via Overpass) ----------------------
+    def _bbox_for(self, lat: float, lon: float) -> tuple[float, float, float, float]:
+        half_extent_m = (self.size * self.meters_per_cell) / 2
+        lat_delta = half_extent_m / METERS_PER_DEGREE_LAT
+        # guard against cos(90deg) blowing up near the poles
+        cos_lat = max(math.cos(math.radians(lat)), 1e-6)
+        lon_delta = half_extent_m / (METERS_PER_DEGREE_LAT * cos_lat)
+        south, north = lat - lat_delta, lat + lat_delta
+        west, east = lon - lon_delta, lon + lon_delta
+        return south, west, north, east
+
+    def _latlon_to_grid(self, lat: float, lon: float, bounds=None) -> tuple[float, float]:
+        """lat/lon -> fractional (row, col). row 0 is the north edge."""
+        south, west, north, east = bounds or self.bounds
+        row = (north - lat) / (north - south) * self.size
+        col = (lon - west) / (east - west) * self.size
+        return row, col
+
+    def cell_to_latlon(self, row: int, col: int) -> tuple[float, float] | None:
+        """Center lat/lon of a grid cell. Use this to place markers on Leaflet."""
+        if not self.bounds:
+            return None
+        south, west, north, east = self.bounds
+        lat = north - (row + 0.5) / self.size * (north - south)
+        lon = west + (col + 0.5) / self.size * (east - west)
+        return lat, lon
+
+    def latlon_to_cell(self, lat: float, lon: float) -> tuple[int, int] | None:
+        """lat/lon -> (row, col). Use this to turn a Leaflet click into ignite(x, y)."""
+        if not self.bounds:
+            return None
+        row, col = self._latlon_to_grid(lat, lon)
+        return int(row), int(col)
+
+    def _fetch_osm_data(self, bounds) -> dict | None:
+        south, west, north, east = bounds
+        bbox = f"{south},{west},{north},{east}"
+        query = f"""
+        [out:json][timeout:{OVERPASS_TIMEOUT_S}];
+        (
+          way["natural"="water"]({bbox});
+          way["waterway"]({bbox});
+          way["landuse"="forest"]({bbox});
+          way["natural"="wood"]({bbox});
+          way["landuse"="grass"]({bbox});
+          way["natural"="grassland"]({bbox});
+          way["landuse"="farmland"]({bbox});
+          way["landuse"="meadow"]({bbox});
+          way["landuse"="residential"]({bbox});
+          way["building"]({bbox});
+          way["highway"]({bbox});
+          way["power"="line"]({bbox});
+          node["place"]({bbox});
+        );
+        out body;
+        >;
+        out skel qt;
+        """
+        try:
+            payload = urllib.parse.urlencode({"data": query}).encode()
+            req = urllib.request.Request(OVERPASS_URL, data=payload)
+            with urllib.request.urlopen(req, timeout=OVERPASS_TIMEOUT_S + 5) as resp:
+                return json.loads(resp.read().decode())
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+            return None
+
+    def _apply_osm_overlay(self, osm: dict, bounds):
+        """Paint OSM features over an existing fuel map without resetting it.
+        Water, roads, buildings, towns are painted on top of whatever base
+        (elevation-derived or synthetic) already exists."""
+        nodes: dict[int, tuple[float, float]] = {}
+        ways = []
+        places = []
+        for el in osm.get("elements", []):
+            if el["type"] == "node":
+                nodes[el["id"]] = (el["lat"], el["lon"])
+                if el.get("tags", {}).get("place") in PLACE_TAGS:
+                    places.append(el)
+            elif el["type"] == "way":
+                ways.append(el)
+
+        n = self.size
+
+        def way_to_grid_coords(way):
+            coords = []
+            for nid in way.get("nodes", []):
+                if nid not in nodes:
+                    return None
+                lat_n, lon_n = nodes[nid]
+                row, col = self._latlon_to_grid(lat_n, lon_n, bounds)
+                coords.append((col, row))
+            return coords
+
+        def paint_polygon(coords, fuel_value):
+            if len(coords) < 4:
+                return
+            from matplotlib.path import Path as MplPath
+            import numpy as np
+            row_centers = np.arange(n) + 0.5
+            col_centers = np.arange(n) + 0.5
+            rows, cols = np.meshgrid(row_centers, col_centers, indexing="ij")
+            cell_points = np.stack([cols.ravel(), rows.ravel()], axis=-1)
+            path = MplPath(coords)
+            mask = path.contains_points(cell_points).reshape(n, n)
+            if mask.any():
+                self.fuel_map[mask] = fuel_value
+
+        def paint_line(coords, fuel_value, width_cells=1):
+            for (x0, y0), (x1, y1) in zip(coords[:-1], coords[1:]):
+                self._rasterize_line(x0, y0, x1, y1, fuel_value, width_cells)
+
+        ways_by_key: dict[tuple[str, str | None], list] = {}
+        for way in ways:
+            tags = way.get("tags", {})
+            for key, val in tags.items():
+                ways_by_key.setdefault((key, val), []).append(way)
+                ways_by_key.setdefault((key, None), []).append(way)
+
+        for (osm_key, osm_val), fuel_name, kind in OSM_LAYERS:
+            fuel_value = FUEL_TYPES[fuel_name]
+            for way in ways_by_key.get((osm_key, osm_val), []):
+                coords = way_to_grid_coords(way)
+                if not coords:
+                    continue
+                is_closed = way["nodes"][0] == way["nodes"][-1]
+                if kind == "poly" and is_closed:
+                    paint_polygon(coords, fuel_value)
                 else:
-                    self.fuel_map[i, j] = FUEL_TYPES["road"]
+                    paint_line(coords, fuel_value)
 
+        name_set = {t["name"] for t in self.towns}
+        for p in places:
+            cell = self.latlon_to_cell(p["lat"], p["lon"])
+            if cell is None:
+                continue
+            row, col = cell
+            if 0 <= row < n and 0 <= col < n:
+                name = p.get("tags", {}).get("name", f"Place {len(self.towns) + 1}")
+                if name not in name_set:
+                    name_set.add(name)
+                    self.towns.append({"x": int(col), "y": int(row), "name": name})
+                self.fuel_map[row, col] = FUEL_TYPES["town"]
+
+    def _generate_terrain_from_osm(self, bounds) -> bool:
+        osm = self._fetch_osm_data(bounds)
+        if not osm or not osm.get("elements"):
+            return False
+
+        nodes: dict[int, tuple[float, float]] = {}
+        ways = []
+        places = []
+        for el in osm["elements"]:
+            if el["type"] == "node":
+                nodes[el["id"]] = (el["lat"], el["lon"])
+                if el.get("tags", {}).get("place") in PLACE_TAGS:
+                    places.append(el)
+            elif el["type"] == "way":
+                ways.append(el)
+
+        n = self.size
+        # default background: open/unclassified land reads as grass
+        self.fuel_map = np.full((n, n), FUEL_TYPES["grass"], dtype=np.int8)
+
+        row_centers = np.arange(n) + 0.5
+        col_centers = np.arange(n) + 0.5
+        rows, cols = np.meshgrid(row_centers, col_centers, indexing="ij")
+        cell_points = np.stack([cols.ravel(), rows.ravel()], axis=-1)  # (x=col, y=row)
+
+        def way_to_grid_coords(way):
+            coords = []
+            for nid in way.get("nodes", []):
+                if nid not in nodes:
+                    return None
+                lat_n, lon_n = nodes[nid]
+                row, col = self._latlon_to_grid(lat_n, lon_n, bounds)
+                coords.append((col, row))
+            return coords
+
+        def paint_polygon(coords, fuel_value):
+            if len(coords) < 4:  # need at least a closed triangle (3 + repeat)
+                return
+            path = MplPath(coords)
+            mask = path.contains_points(cell_points).reshape(n, n)
+            if mask.any():
+                self.fuel_map[mask] = fuel_value
+
+        def paint_line(coords, fuel_value, width_cells=1):
+            for (x0, y0), (x1, y1) in zip(coords[:-1], coords[1:]):
+                self._rasterize_line(x0, y0, x1, y1, fuel_value, width_cells)
+
+        ways_by_key: dict[tuple[str, str | None], list] = {}
+        for way in ways:
+            tags = way.get("tags", {})
+            for key, val in tags.items():
+                ways_by_key.setdefault((key, val), []).append(way)
+                ways_by_key.setdefault((key, None), []).append(way)
+
+        for (osm_key, osm_val), fuel_name, kind in OSM_LAYERS:
+            fuel_value = FUEL_TYPES[fuel_name]
+            for way in ways_by_key.get((osm_key, osm_val), []):
+                coords = way_to_grid_coords(way)
+                if not coords:
+                    continue
+                is_closed = way["nodes"][0] == way["nodes"][-1]
+                if kind == "poly" and is_closed:
+                    paint_polygon(coords, fuel_value)
+                else:
+                    paint_line(coords, fuel_value)
+
+        self.towns = []
+        for p in places:
+            cell = self.latlon_to_cell(p["lat"], p["lon"])
+            if cell is None:
+                continue
+            row, col = cell
+            if 0 <= row < n and 0 <= col < n:
+                self.towns.append(
+                    {
+                        "x": int(col),
+                        "y": int(row),
+                        "name": p.get("tags", {}).get("name", f"Town {len(self.towns) + 1}"),
+                    }
+                )
+
+        return True
+
+    def _rasterize_line(self, x0: float, y0: float, x1: float, y1: float, fuel_value: int, width_cells: int = 1):
+        """Bresenham line rasterization in (col, row) space, with an optional
+        square brush so thin features like roads and power-line firebreaks
+        show up as more than a single pixel-wide diagonal."""
+        n = self.size
+        x0i, y0i = int(round(x0)), int(round(y0))
+        x1i, y1i = int(round(x1)), int(round(y1))
+        dx, dy = abs(x1i - x0i), -abs(y1i - y0i)
+        sx = 1 if x0i < x1i else -1
+        sy = 1 if y0i < y1i else -1
+        err = dx + dy
+        x, y = x0i, y0i
+        half_w = width_cells // 2
+        while True:
+            for ox in range(-half_w, half_w + 1):
+                for oy in range(-half_w, half_w + 1):
+                    px, py = x + ox, y + oy
+                    if 0 <= px < n and 0 <= py < n:
+                        self.fuel_map[py, px] = fuel_value
+            if x == x1i and y == y1i:
+                break
+            e2 = 2 * err
+            if e2 >= dy:
+                err += dy
+                x += sx
+            if e2 <= dx:
+                err += dx
+                y += sy
+
+    # -- synthetic fallback (used only if OSM data can't be fetched) ----
+    def _generate_terrain_synthetic(self, lat: float, lon: float):
+        seed = self._seed_from_location(lat, lon)
+        rng = np.random.default_rng(seed)
+        n = self.size
+
+        coarse = rng.random((n // 4 + 2, n // 4 + 2))
+        up = np.repeat(np.repeat(coarse, 4, axis=0), 4, axis=1)
+        smooth = gaussian_filter(up[:n, :n], sigma=1.5)
+
+        threshold_rng = np.random.default_rng(seed + 1)
+        jitter = threshold_rng.uniform(-0.03, 0.03, (n, n)).astype(np.float64)
+        smooth = np.clip(smooth + jitter, 0, 1)
+
+        self.fuel_map = np.zeros((n, n), dtype=np.int8)
+        self.fuel_map[smooth < 0.35] = FUEL_TYPES["forest"]
+        self.fuel_map[(smooth >= 0.35) & (smooth < 0.65)] = FUEL_TYPES["grass"]
+        self.fuel_map[(smooth >= 0.65) & (smooth < 0.75)] = FUEL_TYPES["water"]
+        self.fuel_map[(smooth >= 0.75) & (smooth < 0.88)] = FUEL_TYPES["town"]
+        self.fuel_map[(smooth >= 0.88) & (smooth < 0.95)] = FUEL_TYPES["road"]
+        self.fuel_map[smooth >= 0.95] = FUEL_TYPES["firebreak"]
+
+        self.towns = []
+        town_cells = np.argwhere(self.fuel_map == FUEL_TYPES["town"])
+        if len(town_cells) > 0:
+            town_rng = np.random.default_rng(seed + 2)
+            n_towns = min(6, max(2, len(town_cells) // 8))
+            chosen = town_rng.choice(len(town_cells), n_towns, replace=False)
+            for idx in chosen:
+                i, j = town_cells[idx]
+                self.towns.append({"x": int(j), "y": int(i), "name": f"Town {len(self.towns) + 1}"})
+
+    # ------------------------------------------------------------------
+    # Fire state
+    # ------------------------------------------------------------------
     def ignite(self, x: int, y: int) -> bool:
+        """x = column, y = row - matches the (row, col) convention used
+        everywhere else in this file (fuel_map[row, col], towns as
+        {x: col, y: row}). Previously this indexed fire_mask[x, y], which
+        silently transposed every ignition point off the diagonal."""
         if 0 <= x < self.size and 0 <= y < self.size:
-            if self.fire_mask[x, y] == CELL_STATES["unburned"]:
-                self.fire_mask[x, y] = CELL_STATES["burning"]
+            if self.fire_mask[y, x] == CELL_STATES["unburned"]:
+                self.fire_mask[y, x] = CELL_STATES["burning"]
                 return True
         return False
 
     def clear(self, x: int, y: int) -> bool:
         if 0 <= x < self.size and 0 <= y < self.size:
-            self.fire_mask[x, y] = CELL_STATES["unburned"]
+            self.fire_mask[y, x] = CELL_STATES["unburned"]
             return True
         return False
 
@@ -94,6 +470,7 @@ class Grid:
             "grid": self.fuel_map.tolist(),
             "fire_mask": self.fire_mask.tolist(),
             "towns": self.towns,
+            "bounds": list(self.bounds) if self.bounds else None,
             "fuel_types": {v: k for k, v in FUEL_TYPES.items()},
             "cell_states": {v: k for k, v in CELL_STATES.items()},
         }

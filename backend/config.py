@@ -32,6 +32,9 @@ class Settings(BaseSettings):
 
     firms_api_key: str = ""
 
+    open_topography_url: str = "https://portal.opentopography.org/API/globaldem"
+    open_topography_api_key: str = ""
+
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://localhost:3000",

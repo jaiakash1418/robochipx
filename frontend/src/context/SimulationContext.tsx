@@ -8,6 +8,7 @@ import type {
   CellState,
   UserLocation,
   GridRect,
+  GridBounds,
   FlyTarget,
   RectangleMode,
   PaintMode,
@@ -27,6 +28,20 @@ interface ScenarioData {
   savedAt: string;
 }
 
+const DEFAULT_LAT = 39.8283;
+const DEFAULT_LON = -98.5795;
+
+function computeGridBounds(lat: number | null, lon: number | null): GridBounds {
+  const cLat = lat ?? DEFAULT_LAT;
+  const cLon = lon ?? DEFAULT_LON;
+  return {
+    south: cLat - 0.5,
+    north: cLat + 0.5,
+    west: cLon - 0.5,
+    east: cLon + 0.5,
+  };
+}
+
 interface SimulationState {
   running: boolean;
   fireMask: CellState[][];
@@ -43,6 +58,7 @@ interface SimulationState {
   userLocation: UserLocation | null;
   customLat: number | null;
   customLon: number | null;
+  gridBounds: GridBounds;
   rectangleMode: RectangleMode;
   paintMode: PaintMode;
   selectActive: boolean;
@@ -91,6 +107,7 @@ const initialState: SimulationState = {
   userLocation: null,
   customLat: null,
   customLon: null,
+  gridBounds: computeGridBounds(null, null),
   rectangleMode: 'off',
   paintMode: 'off',
   selectActive: false,
@@ -146,7 +163,7 @@ function reducer(state: SimulationState, action: Action): SimulationState {
     case 'SET_USER_LOCATION':
       return { ...state, userLocation: action.payload };
     case 'SET_CUSTOM_LOCATION':
-      return { ...state, customLat: action.payload.lat, customLon: action.payload.lon };
+      return { ...state, customLat: action.payload.lat, customLon: action.payload.lon, gridBounds: computeGridBounds(action.payload.lat, action.payload.lon) };
     case 'SET_RECTANGLE_MODE':
       return { ...state, rectangleMode: action.payload, paintMode: 'off', selectActive: false };
     case 'SET_PAINT_MODE':
@@ -262,7 +279,6 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const doIgnite = useCallback(async (x: number, y: number) => {
     if (connected) {
       send({ type: 'ignite', x, y });
-      send({ type: 'tick' });
     } else {
       dispatch({ type: 'SET_LOADING' });
       try {
@@ -331,10 +347,17 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     }
   }, [connected, send]);
 
-  const setCustomLocation = useCallback((lat: number | null, lon: number | null) => {
+  const setCustomLocation = useCallback(async (lat: number | null, lon: number | null) => {
     dispatch({ type: 'SET_CUSTOM_LOCATION', payload: { lat, lon } });
     if (connected) {
       send({ type: 'set_location', lat, lon });
+    } else if (lat !== null && lon !== null) {
+      try {
+        const res = await api.setBackendLocation(lat, lon);
+        if (res.state) {
+          dispatch({ type: 'UPDATE_SIMULATION', payload: res.state as TickResponse });
+        }
+      } catch { /* ignore */ }
     }
   }, [connected, send]);
 
@@ -357,6 +380,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const doClearBatch = useCallback(async (cells: { x: number; y: number }[]) => {
     if (connected) {
       send({ type: 'clear_batch', cells });
+      send({ type: 'tick' });
     } else {
       dispatch({ type: 'SET_LOADING' });
       try {
@@ -373,7 +397,6 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const doIgniteBatch = useCallback(async (cells: { x: number; y: number }[]) => {
     if (connected) {
       send({ type: 'ignite_batch', cells });
-      send({ type: 'tick' });
     } else {
       dispatch({ type: 'SET_LOADING' });
       try {

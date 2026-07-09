@@ -11,23 +11,6 @@ const GRID_SIZE = 64;
 const CANVAS_SIZE = 1024;
 const CELL_SIZE = CANVAS_SIZE / GRID_SIZE;
 
-const GRID_SOUTH = 37.5;
-const GRID_NORTH = 38.5;
-const GRID_WEST = -122.0;
-const GRID_EAST = -121.0;
-
-function gridToLatLng(cellX: number, cellY: number): [number, number] {
-  const lat = GRID_NORTH - ((cellY + 0.5) / GRID_SIZE) * (GRID_NORTH - GRID_SOUTH);
-  const lng = GRID_WEST + ((cellX + 0.5) / GRID_SIZE) * (GRID_EAST - GRID_WEST);
-  return [lat, lng];
-}
-
-function latLngToGrid(lat: number, lng: number): { x: number; y: number } {
-  const col = Math.round(((lng - GRID_WEST) / (GRID_EAST - GRID_WEST)) * GRID_SIZE);
-  const row = Math.round(((GRID_NORTH - lat) / (GRID_NORTH - GRID_SOUTH)) * GRID_SIZE);
-  return { x: Math.max(0, Math.min(GRID_SIZE - 1, col)), y: Math.max(0, Math.min(GRID_SIZE - 1, row)) };
-}
-
 export default function MapView() {
   const { t } = useTranslation();
   const mapRef = useRef<L.Map | null>(null);
@@ -40,12 +23,28 @@ export default function MapView() {
   const userMarkerRef = useRef<L.Marker | null>(null);
   const selRectRef = useRef<L.Rectangle | null>(null);
   const selStartRef = useRef<{ x: number; y: number } | null>(null);
+  const gridRectRef = useRef<L.Rectangle | null>(null);
   const toolActiveRef = useRef(false);
   const { state, doIgnite, setSelectedArea } = useSimulation();
-  const { fireMask, fuelMap, alerts, weather, userLocation, selectActive, selectedArea, flyToTarget } = state;
+  const { fireMask, fuelMap, alerts, weather, userLocation, selectActive, selectedArea, flyToTarget, gridBounds } = state;
+
+  const { north, south, west, east } = gridBounds;
+
+  const gridToLatLng = useCallback((cellX: number, cellY: number): [number, number] => {
+    const lat = north - ((cellY + 0.5) / GRID_SIZE) * (north - south);
+    const lng = west + ((cellX + 0.5) / GRID_SIZE) * (east - west);
+    return [lat, lng];
+  }, [north, south, west, east]);
+
+  const latLngToGrid = useCallback((lat: number, lng: number): { x: number; y: number } => {
+    const col = Math.round(((lng - west) / (east - west)) * GRID_SIZE);
+    const row = Math.round(((north - lat) / (north - south)) * GRID_SIZE);
+    return { x: Math.max(0, Math.min(GRID_SIZE - 1, col)), y: Math.max(0, Math.min(GRID_SIZE - 1, row)) };
+  }, [north, south, west, east]);
   toolActiveRef.current = selectActive;
 
   const getPerimeterPoints = useCallback((): [number, number][] => {
+    const g2ll = gridToLatLng;
     const pts: [number, number][] = [];
 
     for (let row = 0; row < GRID_SIZE; row++) {
@@ -62,19 +61,19 @@ export default function MapView() {
 
         for (const [nr, nc] of neighbors) {
           if (nr < 0 || nr >= GRID_SIZE || nc < 0 || nc >= GRID_SIZE) {
-            pts.push(gridToLatLng(col, row));
+            pts.push(g2ll(col, row));
             break;
           }
           const ns = fireMask[nr]?.[nc] as CellState | undefined;
           if (ns === undefined || ns === 0) {
-            pts.push(gridToLatLng(col, row));
+            pts.push(g2ll(col, row));
             break;
           }
         }
       }
     }
     return pts;
-  }, [fireMask]);
+  }, [fireMask, gridToLatLng]);
 
   const updatePerimeter = useCallback(() => {
     const map = mapRef.current;
@@ -158,7 +157,7 @@ export default function MapView() {
 
       evacLinesRef.current.push(line);
     }
-  }, [alerts]);
+  }, [alerts, gridToLatLng]);
 
   const drawGrid = useCallback(() => {
     const canvas = canvasRef.current;
@@ -226,7 +225,7 @@ export default function MapView() {
 
     updatePerimeter();
     updateEvacuationRoutes();
-  }, [fuelMap, fireMask, weather, userLocation, updatePerimeter, updateEvacuationRoutes]);
+  }, [fuelMap, fireMask, weather, userLocation, updatePerimeter, updateEvacuationRoutes, latLngToGrid]);
 
   function drawWindParticles(
     ctx: CanvasRenderingContext2D,
@@ -290,45 +289,65 @@ export default function MapView() {
       { maxZoom: 19, attribution: '&copy; Esri' },
     ).addTo(map);
 
-    const bounds = L.latLngBounds([[GRID_SOUTH, GRID_WEST], [GRID_NORTH, GRID_EAST]]);
+    mapRef.current = map;
+    setTimeout(() => map.invalidateSize(), 100);
 
-    L.rectangle(bounds, {
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  /* recreate overlay & grid rectangle when grid bounds change */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (overlayRef.current) {
+      map.removeLayer(overlayRef.current);
+      overlayRef.current = null;
+    }
+    if (gridRectRef.current) {
+      map.removeLayer(gridRectRef.current);
+      gridRectRef.current = null;
+    }
+
+    const bounds = L.latLngBounds([[south, west], [north, east]]);
+
+    gridRectRef.current = L.rectangle(bounds, {
       color: '#ff6b35',
       weight: 2,
       fill: false,
       opacity: 0.6,
     }).addTo(map);
 
-    const overlay = L.imageOverlay(canvas.toDataURL(), bounds, {
-      interactive: true,
-    }).addTo(map);
+    const overlay = L.imageOverlay(
+      canvasRef.current?.toDataURL() ?? '',
+      bounds,
+      { interactive: true },
+    ).addTo(map);
     overlayRef.current = overlay;
+  }, [south, north, west, east]);
 
-    const clickHandler = (e: L.LeafletMouseEvent) => {
+  /* map click → ignite */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const handler = (e: L.LeafletMouseEvent) => {
       if (toolActiveRef.current) return;
-      if (!bounds.contains(e.latlng)) return;
-      const latPct =
-        (e.latlng.lat - bounds.getSouth()) /
-        (bounds.getNorth() - bounds.getSouth());
-      const lngPct =
-        (e.latlng.lng - bounds.getWest()) /
-        (bounds.getEast() - bounds.getWest());
+      const b = overlayRef.current?.getBounds();
+      if (!b || !b.contains(e.latlng)) return;
+      const latPct = (e.latlng.lat - b.getSouth()) / (b.getNorth() - b.getSouth());
+      const lngPct = (e.latlng.lng - b.getWest()) / (b.getEast() - b.getWest());
       const x = Math.floor(lngPct * GRID_SIZE);
       const y = Math.floor((1 - latPct) * GRID_SIZE);
       if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
         doIgnite(x, y);
       }
     };
-    map.on('click', clickHandler);
-
-    mapRef.current = map;
-    setTimeout(() => map.invalidateSize(), 100);
-
-    return () => {
-      map.removeEventListener('click', clickHandler);
-      map.remove();
-      mapRef.current = null;
-    };
+    map.on('click', handler);
+    return () => { map.off('click', handler); };
   }, [doIgnite]);
 
   useEffect(() => {
@@ -369,7 +388,7 @@ export default function MapView() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const gridBounds = L.latLngBounds([[GRID_SOUTH, GRID_WEST], [GRID_NORTH, GRID_EAST]]);
+    const gBounds = L.latLngBounds([[south, west], [north, east]]);
 
     /* draw the persistent selection rectangle if one exists */
     const drawPersistentSel = () => {
@@ -378,7 +397,7 @@ export default function MapView() {
         selRectRef.current = null;
       }
       if (selectedArea && !selectActive) {
-        const sw = gridToLatLng(selectedArea.x1, selectedArea.y2);
+            const sw = gridToLatLng(selectedArea.x1, selectedArea.y2);
         const ne = gridToLatLng(selectedArea.x2, selectedArea.y1);
         selRectRef.current = L.rectangle(L.latLngBounds(sw, ne), {
           color: '#ff6b35',
@@ -406,9 +425,9 @@ export default function MapView() {
     map.getContainer().style.cursor = 'crosshair';
 
     const onDown = (e: L.LeafletMouseEvent) => {
-      if (!gridBounds.contains(e.latlng)) return;
-      const pctX = (e.latlng.lng - GRID_WEST) / (GRID_EAST - GRID_WEST);
-      const pctY = 1 - (e.latlng.lat - GRID_SOUTH) / (GRID_NORTH - GRID_SOUTH);
+      if (!gBounds.contains(e.latlng)) return;
+      const pctX = (e.latlng.lng - west) / (east - west);
+      const pctY = 1 - (e.latlng.lat - south) / (north - south);
       selStartRef.current = {
         x: Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(pctX * GRID_SIZE))),
         y: Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(pctY * GRID_SIZE))),
@@ -416,9 +435,9 @@ export default function MapView() {
     };
 
     const onMove = (e: L.LeafletMouseEvent) => {
-      if (!selStartRef.current || !gridBounds.contains(e.latlng)) return;
-      const pctX = (e.latlng.lng - GRID_WEST) / (GRID_EAST - GRID_WEST);
-      const pctY = 1 - (e.latlng.lat - GRID_SOUTH) / (GRID_NORTH - GRID_SOUTH);
+      if (!selStartRef.current || !gBounds.contains(e.latlng)) return;
+      const pctX = (e.latlng.lng - west) / (east - west);
+      const pctY = 1 - (e.latlng.lat - south) / (north - south);
       const cx = Math.floor(pctX * GRID_SIZE);
       const cy = Math.floor(pctY * GRID_SIZE);
       const sx = Math.min(selStartRef.current.x, Math.max(0, Math.min(GRID_SIZE - 1, cx)));
@@ -446,10 +465,10 @@ export default function MapView() {
       const b = selRectRef.current.getBounds();
       const sw = b.getSouthWest();
       const ne = b.getNorthEast();
-      const x1 = Math.floor(((sw.lng - GRID_WEST) / (GRID_EAST - GRID_WEST)) * GRID_SIZE);
-      const x2 = Math.ceil(((ne.lng - GRID_WEST) / (GRID_EAST - GRID_WEST)) * GRID_SIZE);
-      const y1 = Math.floor(((GRID_NORTH - ne.lat) / (GRID_NORTH - GRID_SOUTH)) * GRID_SIZE);
-      const y2 = Math.ceil(((GRID_NORTH - sw.lat) / (GRID_NORTH - GRID_SOUTH)) * GRID_SIZE);
+      const x1 = Math.floor(((sw.lng - west) / (east - west)) * GRID_SIZE);
+      const x2 = Math.ceil(((ne.lng - west) / (east - west)) * GRID_SIZE);
+      const y1 = Math.floor(((north - ne.lat) / (north - south)) * GRID_SIZE);
+      const y2 = Math.ceil(((north - sw.lat) / (north - south)) * GRID_SIZE);
       setSelectedArea({ x1, y1, x2, y2 });
     };
 
@@ -464,7 +483,7 @@ export default function MapView() {
       map.off('mousemove', onMove);
       map.off('mouseup', onUp);
     };
-  }, [selectActive, selectedArea, setSelectedArea]);
+  }, [selectActive, selectedArea, setSelectedArea, south, north, west, east]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
