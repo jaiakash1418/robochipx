@@ -38,7 +38,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!showLiveFires) { setLiveFires([]); return; }
     const fetch = async () => {
-      try { const d = await getLiveFires(); setLiveFires(d.fires); } catch {}
+      try { const d = await getLiveFires(); setLiveFires(d.fires); } catch (e) { console.warn('[LiveFires] Failed to fetch', e); }
     };
     fetch();
     const id = setInterval(fetch, 5 * 60 * 1000);
