@@ -156,7 +156,7 @@ export default function DashboardPage() {
                     setUserLocation(coords);
                     setFlyToFire(coords);
                   },
-                  () => { /* prefererence denied or unavailable */ },
+                  () => { /* preference denied or unavailable */ },
                   { enableHighAccuracy: false, timeout: 10000 },
                 );
               }}
