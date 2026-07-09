@@ -123,10 +123,10 @@ async def get_live_fires():
             "latitude": coords[1],
             "longitude": coords[0],
             "magnitude": latest.get("magnitudeValue"),
-            "magnitude_unit": latest.get("magnitudeUnit", "acres"),
-            "date": latest_date,
-            "first_detected": earliest.get("date"),
-            "sources": ev.get("sources", []),
+            "magnitude_unit": latest.get("magnitudeUnit") or "acres",
+            "date": latest_date or "",
+            "first_detected": earliest.get("date") or latest_date or "",
+            "sources": ev.get("sources") or [],
         })
     fires.sort(key=lambda f: f.get("date") or "", reverse=True)
     trimmed = fires[:200]
