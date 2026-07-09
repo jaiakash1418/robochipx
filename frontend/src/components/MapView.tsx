@@ -1,9 +1,8 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSimulation } from '../context/SimulationContext';
 import { FUEL_COLORS, type FuelType, type CellState } from '../api/types';
-import { fetchLocationWeather, type LocationWeather } from '../api/weatherApi';
 import MapWeatherOverlay from './MapWeatherOverlay';
 
 const GRID_SIZE = 64;
@@ -14,8 +13,6 @@ const GRID_BOUNDS: L.LatLngBoundsExpression = [
   [37.5, -122.0],
   [38.5, -121.0],
 ];
-
-const WEATHER_UPDATE_MS = 60000;
 
 function gridToLatLng(cellX: number, cellY: number): [number, number] {
   const south = 37.5;
@@ -36,23 +33,7 @@ export default function MapView() {
   const perimeterLayerRef = useRef<L.Polygon | null>(null);
   const evacLinesRef = useRef<L.Polyline[]>([]);
   const { state, doIgnite } = useSimulation();
-  const { fireMask, fuelMap, alerts } = state;
-
-  const [weather, setWeather] = useState<LocationWeather | null>(null);
-  const [weatherLoading, setWeatherLoading] = useState(false);
-  const [mapCenter, setMapCenter] = useState<L.LatLng | null>(null);
-
-  const fetchWeather = useCallback(async (lat: number, lng: number) => {
-    setWeatherLoading(true);
-    try {
-      const w = await fetchLocationWeather(lat, lng);
-      setWeather(w);
-    } catch {
-      console.warn('Weather fetch failed');
-    } finally {
-      setWeatherLoading(false);
-    }
-  }, []);
+  const { fireMask, fuelMap, alerts, weather } = state;
 
   const getPerimeterPoints = useCallback((): [number, number][] => {
     const pts: [number, number][] = [];
@@ -177,8 +158,8 @@ export default function MapView() {
 
     ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-    const wDir = weather?.windDirection ?? 0;
-    const wSpeed = weather?.windSpeed ?? 0;
+    const wDir = weather?.wind_direction ?? 0;
+    const wSpeed = weather?.wind_speed ?? 0;
     const rad = ((wDir - 180) * Math.PI) / 180;
 
     for (let row = 0; row < GRID_SIZE; row++) {
@@ -309,14 +290,6 @@ export default function MapView() {
       }
     });
 
-    const updateCenter = () => {
-      const center = map.getCenter();
-      setMapCenter(center);
-    };
-
-    map.on('moveend', updateCenter);
-    updateCenter();
-
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 100);
 
@@ -330,26 +303,10 @@ export default function MapView() {
     if (mapRef.current) drawGrid();
   }, [drawGrid]);
 
-  useEffect(() => {
-    if (!mapCenter) return;
-
-    fetchWeather(mapCenter.lat, mapCenter.lng);
-
-    const interval = setInterval(() => {
-      if (mapRef.current) {
-        const c = mapRef.current.getCenter();
-        setMapCenter(c);
-        fetchWeather(c.lat, c.lng);
-      }
-    }, WEATHER_UPDATE_MS);
-
-    return () => clearInterval(interval);
-  }, [mapCenter, fetchWeather]);
-
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-      <MapWeatherOverlay weather={weather} loading={weatherLoading} />
+      <MapWeatherOverlay weather={weather} loading={false} />
     </div>
   );
 }

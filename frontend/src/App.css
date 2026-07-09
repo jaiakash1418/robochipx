@@ -653,6 +653,16 @@
   margin-bottom: 16px;
 }
 
+.chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
 /* ============ TIME SCRUBBER ============ */
 
 .time-scrubber {

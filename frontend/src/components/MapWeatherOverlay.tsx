@@ -1,8 +1,8 @@
 import { Compass, Wind, Droplets, Thermometer } from 'lucide-react';
-import type { LocationWeather } from '../api/weatherApi';
+import type { WeatherResponse } from '../api/types';
 
 interface Props {
-  weather: LocationWeather | null;
+  weather: WeatherResponse | null;
   loading: boolean;
 }
 
@@ -19,9 +19,7 @@ export default function MapWeatherOverlay({ weather, loading }: Props) {
         <>
           <div className="weather-header">
             <Compass size={14} />
-            <span className="weather-location">
-              {weather.location.lat.toFixed(2)}°N, {weather.location.lng.toFixed(2)}°W
-            </span>
+            <span className="weather-source">{weather.source}</span>
           </div>
 
           <div className="weather-rows">
@@ -32,13 +30,13 @@ export default function MapWeatherOverlay({ weather, loading }: Props) {
               <div className="weather-row-info">
                 <span className="weather-row-label">Wind</span>
                 <span className="weather-row-value">
-                  {weather.windSpeed.toFixed(1)} km/h
+                  {weather.wind_speed.toFixed(1)} km/h
                 </span>
               </div>
               <div
                 className="weather-compass"
-                style={{ transform: `rotate(${weather.windDirection}deg)` }}
-                title={`${weather.windDirection}°`}
+                style={{ transform: `rotate(${weather.wind_direction}deg)` }}
+                title={`${weather.wind_direction}°`}
               >
                 ↑
               </div>
