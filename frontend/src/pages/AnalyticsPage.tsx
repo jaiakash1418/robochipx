@@ -15,164 +15,163 @@ import {
 
 const COLORS = ['#ff4500', '#ff8c00', '#ffd600', '#00e676', '#00bcd4', '#6b7280'];
 
+const FUEL_LABELS: Record<number, string> = {
+  0: 'Forest', 1: 'Grass', 2: 'Water',
+  3: 'Town', 4: 'Road', 5: 'Firebreak',
+};
+
+function computeFuelDistribution(fuelMap: number[][]): { name: string; value: number }[] {
+  const counts: Record<number, number> = {};
+  let total = 0;
+  for (const row of fuelMap) {
+    for (const cell of row) {
+      counts[cell] = (counts[cell] || 0) + 1;
+      total++;
+    }
+  }
+  return Object.entries(counts)
+    .map(([k, v]) => ({ name: FUEL_LABELS[Number(k)] ?? `Type ${k}`, value: Math.round((v / total) * 100) }))
+    .sort((a, b) => b.value - a.value);
+}
+
 export default function AnalyticsPage() {
   const { state } = useSimulation();
-  const { stats } = state;
+  const { stats, history, fuelMap } = state;
 
-  const burnData = Array.from({ length: 20 }, (_, i) => ({
-    step: i + 1,
-    burned: Math.round(stats.percentage_burned * (i + 1) / 20 * 10) / 10,
-    burning: Math.round(stats.burning * (1 - i / 20)),
-  }));
+  const burnData = history.length >= 2
+    ? history.map((h) => ({
+        step: h.step,
+        burned: h.stats.percentage_burned,
+        burning: h.stats.burning,
+      }))
+    : stats.step > 0
+      ? [{ step: stats.step, burned: stats.percentage_burned, burning: stats.burning }]
+      : [];
 
-  const fuelData = [
-    { name: 'Forest', value: 40 },
-    { name: 'Grass', value: 25 },
-    { name: 'Water', value: 10 },
-    { name: 'Town', value: 10 },
-    { name: 'Road', value: 10 },
-    { name: 'Firebreak', value: 5 },
-  ];
+  const fuelData = fuelMap.length > 0 ? computeFuelDistribution(fuelMap) : [];
+
+  const frontsData = history.length >= 2
+    ? history.map((h) => ({ step: h.step, fronts: h.stats.active_fronts }))
+    : [];
 
   return (
     <div className="analytics-page">
       <div className="analytics-grid">
         <div className="panel chart-card">
           <h3>Burn Progression</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={burnData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-              <XAxis dataKey="step" stroke="var(--text-tertiary)" fontSize={12} />
-              <YAxis stroke="var(--text-tertiary)" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: '8px',
-                  color: 'var(--text-primary)',
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="burned"
-                stroke="var(--accent-fire)"
-                strokeWidth={2}
-                dot={false}
-                name="Burned %"
-              />
-              <Line
-                type="monotone"
-                dataKey="burning"
-                stroke="var(--accent-orange)"
-                strokeWidth={2}
-                dot={false}
-                name="Burning"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {burnData.length < 2 ? (
+            <p className="chart-empty">Run the simulation to see burn progression.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={burnData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                <XAxis dataKey="step" stroke="var(--text-tertiary)" fontSize={12} />
+                <YAxis stroke="var(--text-tertiary)" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: '8px',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="burned"
+                  stroke="var(--accent-fire)"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Burned %"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="burning"
+                  stroke="var(--accent-orange)"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Burning"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="panel chart-card">
           <h3>Fuel Type Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={fuelData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                dataKey="value"
-                stroke="none"
-              >
-                {fuelData.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <RechartsLegend />
-              <Tooltip
-                contentStyle={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: '8px',
-                  color: 'var(--text-primary)',
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+          {fuelData.length === 0 ? (
+            <p className="chart-empty">No fuel map data available.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={fuelData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {fuelData.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsLegend />
+                <Tooltip
+                  contentStyle={{
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: '8px',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="panel chart-card">
           <h3>Active Fronts Over Time</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart
-              data={Array.from({ length: 10 }, (_, i) => ({
-                step: i + 1,
-                fronts: Math.max(0, Math.round(stats.active_fronts * (1 - Math.abs(i - 4) / 10))),
-              }))}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-              <XAxis dataKey="step" stroke="var(--text-tertiary)" fontSize={12} />
-              <YAxis stroke="var(--text-tertiary)" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: '8px',
-                  color: 'var(--text-primary)',
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="fronts"
-                stroke="var(--accent-water)"
-                strokeWidth={2}
-                dot={false}
-                name="Active Fronts"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {frontsData.length < 2 ? (
+            <p className="chart-empty">Run the simulation to see active fronts.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={frontsData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                <XAxis dataKey="step" stroke="var(--text-tertiary)" fontSize={12} />
+                <YAxis stroke="var(--text-tertiary)" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: '8px',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="fronts"
+                  stroke="var(--accent-water)"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Active Fronts"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="panel chart-card">
-          <h3>Weather Correlation</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart
-              data={Array.from({ length: 10 }, (_, i) => ({
-                step: i + 1,
-                wind: Math.round(10 + Math.sin(i) * 8),
-                spread: Math.round(5 + Math.cos(i * 0.7) * 4),
-              }))}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-              <XAxis dataKey="step" stroke="var(--text-tertiary)" fontSize={12} />
-              <YAxis stroke="var(--text-tertiary)" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: '8px',
-                  color: 'var(--text-primary)',
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="wind"
-                stroke="var(--accent-water)"
-                strokeWidth={2}
-                dot={false}
-                name="Wind km/h"
-              />
-              <Line
-                type="monotone"
-                dataKey="spread"
-                stroke="var(--accent-fire)"
-                strokeWidth={2}
-                dot={false}
-                name="Spread rate"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <h3>Weather</h3>
+          <div className="chart-empty">
+            <p>Current weather data available from Control Panel.</p>
+            <p style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>
+              Source: {state.weather?.source ?? 'N/A'} &middot;
+              Wind: {state.weather?.wind_speed.toFixed(1) ?? '-'} km/h &middot;
+              Temp: {state.weather?.temperature.toFixed(1) ?? '-'}°C &middot;
+              Humidity: {state.weather?.humidity ?? '-'}%
+            </p>
+          </div>
         </div>
       </div>
     </div>
