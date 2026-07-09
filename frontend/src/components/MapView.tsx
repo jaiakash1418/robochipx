@@ -74,6 +74,10 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
   );
   const { state, doIgnite, doIgniteArea } = useSimulation();
   const { fireMask, fuelMap, weather } = state;
+  const weatherRef = useRef(weather);
+  weatherRef.current = weather;
+  const lastOverlayUpdateRef = useRef(0);
+  const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() => {});
 
   const getPerimeterPoints = useCallback((): [number, number][] => {
     const pts: [number, number][] = [];
@@ -173,9 +177,10 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
     gridSnapshotRef.current = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   }, [fuelMap, fireMask]);
 
-  const drawWindParticles = useCallback((ctx: CanvasRenderingContext2D) => {
-    const wDir = weather?.wind_direction ?? 0;
-    const wSpeed = weather?.wind_speed ?? 0;
+  drawWindParticlesRef.current = (ctx: CanvasRenderingContext2D) => {
+    const w = weatherRef.current;
+    const wDir = w?.wind_direction ?? 0;
+    const wSpeed = w?.wind_speed ?? 0;
     const rad = ((wDir + 90) * Math.PI) / 180;
 
     if (wSpeed < 0.5) return;
@@ -188,35 +193,44 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
         x: Math.random() * CANVAS_SIZE,
         y: Math.random() * CANVAS_SIZE,
         speed: 0.6 + Math.random() * 1.8,
+        spawnTime: Date.now(),
+        lifetime: 1.5 + Math.random() * 1.5,
       }));
       windParticlesRef.current = particles;
     }
 
-    const t = Date.now() / 1000;
+    const now = Date.now();
+    const t = now / 1000;
 
     for (const p of particles) {
-      const baseLen = 10 + wSpeed * 0.5;
+      const age = (now - p.spawnTime) / 1000;
+      if (age > p.lifetime || p.x < -60 || p.x > CANVAS_SIZE + 60 || p.y < -60 || p.y > CANVAS_SIZE + 60) {
+        p.x = Math.random() * CANVAS_SIZE;
+        p.y = Math.random() * CANVAS_SIZE;
+        p.spawnTime = now;
+        continue;
+      }
+
+      const lifeFade = 1 - age / p.lifetime;
+      const baseLen = 3 + wSpeed * 0.15;
       const len = baseLen * p.speed;
       const dx = Math.cos(rad) * len;
       const dy = Math.sin(rad) * len;
 
-      const cx = p.x + dx;
-      const cy = p.y + dy;
-
       const pulse = 0.5 + 0.5 * Math.sin(t * 2 + p.x * 0.01 + p.y * 0.01);
-      const alpha = 0.3 + 0.5 * pulse;
+      const alpha = (0.4 + 0.4 * pulse) * lifeFade;
 
       ctx.save();
       ctx.translate(p.x, p.y);
 
       ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
-      ctx.lineWidth = 2 + pulse;
+      ctx.lineWidth = 1.5 + pulse;
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(dx, dy);
       ctx.stroke();
 
-      const arrowSize = 4 + pulse * 2;
+      const arrowSize = 3 + pulse * 1.5;
       const angle = Math.atan2(dy, dx);
       ctx.fillStyle = `rgba(255,255,255,${alpha})`;
       ctx.beginPath();
@@ -234,16 +248,10 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
 
       ctx.restore();
 
-      p.x += dx * 0.04;
-      p.y += dy * 0.04;
-
-      const margin = 60;
-      if (p.x < -margin) p.x = CANVAS_SIZE + margin;
-      if (p.x > CANVAS_SIZE + margin) p.x = -margin;
-      if (p.y < -margin) p.y = CANVAS_SIZE + margin;
-      if (p.y > CANVAS_SIZE + margin) p.y = -margin;
+      p.x += dx * 0.08;
+      p.y += dy * 0.08;
     }
-  }, [weather]);
+  };
 
   const compositeFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -256,9 +264,14 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
     if (snap) {
       ctx.putImageData(snap, 0, 0);
     }
-    drawWindParticles(ctx);
-    overlay.setUrl(canvas.toDataURL());
-  }, [drawWindParticles]);
+    drawWindParticlesRef.current(ctx);
+
+    const now = performance.now();
+    if (now - lastOverlayUpdateRef.current > 66) {
+      overlay.setUrl(canvas.toDataURL());
+      lastOverlayUpdateRef.current = now;
+    }
+  }, []);
 
   useEffect(() => {
     let running = true;
