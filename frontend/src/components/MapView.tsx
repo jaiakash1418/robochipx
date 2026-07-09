@@ -263,8 +263,15 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
   }, [drawWindParticles]);
 
   useEffect(() => {
-    let running = true;
+    const wSpeed = weather?.wind_speed ?? 0;
 
+    // No animation needed — render a single frame when inputs change.
+    if (wSpeed < 0.5) {
+      compositeFrame();
+      return;
+    }
+
+    let running = true;
     const loop = () => {
       if (!running) return;
       compositeFrame();
@@ -276,13 +283,14 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
       running = false;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [compositeFrame]);
+  }, [compositeFrame, weather?.wind_speed]);
 
   useEffect(() => {
     if (!mapRef.current) return;
     drawGridCanvas();
     updatePerimeter();
-  }, [drawGridCanvas, updatePerimeter]);
+    compositeFrame();
+  }, [drawGridCanvas, updatePerimeter, compositeFrame]);
 
   const handleAreaStart = useCallback((e: L.LeafletMouseEvent, map: L.Map) => {
     dragStartRef.current = e.latlng;
