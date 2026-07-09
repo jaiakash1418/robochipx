@@ -52,8 +52,8 @@ export default function Layout() {
         <header className="topbar">
           <div className="topbar-left">
             <div className="topbar-brand">
-              <span className="brand-icon">▲</span>
-              <span className="brand-text">Wildfire Predictor</span>
+              <img src="/logo.jpeg" alt="Logo" className="brand-logo" />
+              <span className="brand-text">FIRE GUARD</span>
             </div>
             <TopNav />
           </div>
