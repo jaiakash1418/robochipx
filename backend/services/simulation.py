@@ -4,6 +4,7 @@ from core.normalization import Normalizer
 from core.alerts import check_alerts
 from models.unet import unet_model
 from services.weather import weather_service
+from services.environment import environment_service
 
 
 class SimulationService:
@@ -40,8 +41,9 @@ class SimulationService:
             self.initial_zone = None
 
         weather = await weather_service.get_current(self.custom_lat, self.custom_lon)
+        env = environment_service.get_spatial_data(self.grid.fuel_map, self.grid.towns, weather)
         input_tensor = self.normalizer.build_input_tensor(
-            self.grid.get_grid_array(), weather
+            self.grid.get_grid_array(), weather, env
         )
         prob_map = unet_model.predict(input_tensor, fuel_map=self.grid.fuel_map)
 
@@ -53,23 +55,55 @@ class SimulationService:
     def _apply_spread(self, prob_map: np.ndarray):
         from scipy.ndimage import binary_dilation
 
-        threshold = 0.4
+        weather = weather_service.cached if weather_service.cached else weather_service.get_demo()
+        wind_speed = weather.get("wind_speed", 10.0)
+        wind_dir = weather.get("wind_direction", 0.0)
+        humidity = weather.get("humidity", 50.0)
+
+        threshold = 0.5 - (wind_speed / 100.0) + (1.0 - humidity / 100.0) * 0.2
+        threshold = float(np.clip(threshold, 0.15, 0.6))
 
         burning = self.grid.fire_mask == 1
         if not burning.any():
             return
 
-        kernel = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
-        neighbors = binary_dilation(burning, structure=kernel)
+        rad = np.radians(90 - wind_dir)
+        stretch = 1.0 + wind_speed / 30.0
+        cos_a, sin_a = np.cos(rad), np.sin(rad)
+
+        kernel_size = 3
+        kernel = np.zeros((kernel_size, kernel_size), dtype=np.float32)
+        for dy in range(-1, 2):
+            for dx in range(-1, 2):
+                if dx == 0 and dy == 0:
+                    kernel[dy + 1, dx + 1] = 1.0
+                    continue
+                rx = dx * cos_a - dy * sin_a
+                ry = dx * sin_a + dy * cos_a
+                rx /= stretch
+                dist = np.sqrt(rx ** 2 + ry ** 2)
+                kernel[dy + 1, dx + 1] = max(0, 1.0 - dist * 0.6)
+
+        structure = (kernel > 0.3).astype(int)
+        kernel = kernel / kernel.sum()
+        neighbors = binary_dilation(burning, structure=structure)
 
         water = self.grid.fuel_map == 2
-        new_fire = (prob_map >= threshold) & (self.grid.fire_mask == 0) & neighbors & ~water
+        fuel_flammability = np.array([1.0, 1.3, 0.0, 0.8, 0.3, 0.1], dtype=np.float32)
+        flammability = fuel_flammability[self.grid.fuel_map.astype(int)]
+
+        adj_threshold = threshold / np.clip(flammability, 0.1, 1.5)
+
+        new_fire = (prob_map >= adj_threshold) & (self.grid.fire_mask == 0) & neighbors & ~water
 
         self.grid.fire_mask[burning] = 2
         self.grid.fire_mask[new_fire] = 1
 
     def ignite(self, x: int, y: int) -> bool:
         return self.grid.ignite(x, y)
+
+    def clear(self, x: int, y: int) -> bool:
+        return self.grid.clear(x, y)
 
     def reset(self):
         self.grid.reset()

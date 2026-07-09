@@ -7,6 +7,7 @@ import {
   Bot,
   Settings,
   Activity,
+  Beaker,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import * as api from '../api/endpoints';
@@ -22,6 +23,7 @@ const links = [
   { to: '/alerts', label: 'Alerts', icon: Bell },
   { to: '/assistant', label: 'AI Agent', icon: Bot },
   { to: '/health', label: 'Health', icon: Activity },
+  { to: '/hackathon', label: 'Hackathon', icon: Beaker },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 

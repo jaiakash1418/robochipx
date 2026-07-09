@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from api.routes import router
+from api.ws_handler import handle_websocket
 
 app = FastAPI(
     title=settings.app_name,
@@ -19,6 +20,11 @@ app.add_middleware(
 )
 
 app.include_router(router)
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await handle_websocket(websocket)
 
 
 @app.on_event("startup")

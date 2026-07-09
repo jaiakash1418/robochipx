@@ -91,6 +91,24 @@ export const getAlerts = async () => {
   return apiClient.get<AlertsResponse>('/alerts').then((r) => r.data);
 };
 
+export const clearBatch = async (cells: { x: number; y: number }[]) => {
+  if (await isUsingMock()) {
+    for (const c of cells) mockEngine.clear(c.x, c.y);
+    return;
+  }
+  return apiClient.post('/clear/batch', { cells }).then((r) => r.data);
+};
+
+export const getEvaluation = async () => {
+  if (await isUsingMock()) return { f1: 0.206, iou: 0.12, samples: [] };
+  return apiClient.get('/model/evaluation').then((r) => r.data);
+};
+
+export const evaluateModel = async () => {
+  if (await isUsingMock()) return { f1: 0.206, iou: 0.12, samples: [] };
+  return apiClient.post('/model/evaluate').then((r) => r.data);
+};
+
 export const setBackendLocation = async (lat?: number, lon?: number) => {
   if (await isUsingMock()) return { success: true, lat, lon };
   return apiClient.post('/location/set', null, { params: { lat, lon } }).then((r) => r.data);

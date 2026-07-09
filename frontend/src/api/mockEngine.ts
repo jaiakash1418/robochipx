@@ -66,6 +66,12 @@ export class MockSimulationEngine {
     return true;
   }
 
+  clear(x: number, y: number) {
+    if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) return false;
+    this.fireMask[y][x] = UNBURNED;
+    return true;
+  }
+
   reset() {
     for (let y = 0; y < GRID_SIZE; y++)
       for (let x = 0; x < GRID_SIZE; x++)

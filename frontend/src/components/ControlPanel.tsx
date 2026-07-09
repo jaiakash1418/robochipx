@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Crop, Flame, Target } from 'lucide-react';
+import { Crop, Flame, Target, Eraser } from 'lucide-react';
 import { useSimulation } from '../context/SimulationContext';
 import InfoTooltip from './InfoTooltip';
 import LocationPicker from './LocationPicker';
@@ -14,9 +14,13 @@ export default function ControlPanel() {
     doOverrideWeather,
     doFetchWeather,
     doFetchWeatherLive,
-    setRectangleMode,
+    setSelectActive,
+    setSelectedArea,
+    setInitialZone,
+    doIgniteBatch,
+    doClearBatch,
   } = useSimulation();
-  const { running, weather, rectangleMode, initialZone } = state;
+  const { running, weather, selectActive, selectedArea, initialZone } = state;
 
   const [windSpeed, setWindSpeed] = useState(12);
   const [windDir, setWindDir] = useState(135);
@@ -168,32 +172,72 @@ export default function ControlPanel() {
       <div className="control-group" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10, marginTop: 6 }}>
         <label style={{ marginBottom: 6 }}>
           <Crop size={14} style={{ marginRight: 4 }} />
-          Rectangle Tool
-          <InfoTooltip text="Click & drag on the map to draw a rectangle. Ignite: instantly fire all cells inside. Zone: marks as fire origin for the next simulation tick." />
+          Area Selection
+          <InfoTooltip text="Click 'Select' then drag on the map to draw a selection rectangle. After selecting, use the buttons below to ignite, clear, or mark zone." />
         </label>
-        <div className="button-row" style={{ gap: 4, marginBottom: 4 }}>
-          <button
-            className={`btn btn-sm ${rectangleMode === 'ignite' ? 'btn-primary' : ''}`}
-            onClick={() => setRectangleMode(rectangleMode === 'ignite' ? 'off' : 'ignite')}
-            style={{ flex: 1, fontSize: '0.72rem' }}
-          >
-            <Flame size={12} /> Ignite
-          </button>
-          <button
-            className={`btn btn-sm ${rectangleMode === 'zone' ? 'btn-primary' : ''}`}
-            onClick={() => setRectangleMode(rectangleMode === 'zone' ? 'off' : 'zone')}
-            style={{ flex: 1, fontSize: '0.72rem' }}
-          >
-            <Target size={12} /> Zone
-          </button>
-        </div>
-        {rectangleMode !== 'off' && (
-          <div style={{ fontSize: '0.68rem', color: 'var(--accent-fire)' }}>
-            Drag on the map to draw a {rectangleMode === 'ignite' ? 'fire' : 'zone'} rectangle
+        <button
+          className={`btn ${selectActive ? 'btn-primary' : ''}`}
+          onClick={() => setSelectActive(!selectActive)}
+          style={{ width: '100%', marginBottom: 4, fontSize: '0.78rem' }}
+        >
+          {selectActive ? '✕ Done Selecting' : '✧ Select Area'}
+        </button>
+        {selectActive && (
+          <div style={{ fontSize: '0.68rem', color: 'var(--accent-fire)', marginBottom: 4 }}>
+            Drag on the map to select an area
           </div>
         )}
+        {selectedArea && (
+          <>
+            <div style={{ fontSize: '0.68rem', color: 'var(--accent-blue)', marginBottom: 4 }}>
+              Selected: ({selectedArea.x1},{selectedArea.y1}) → ({selectedArea.x2},{selectedArea.y2})
+            </div>
+            <div className="button-row" style={{ gap: 4 }}>
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  const cells: { x: number; y: number }[] = [];
+                  for (let r = selectedArea.y1; r <= selectedArea.y2; r++)
+                    for (let c = selectedArea.x1; c <= selectedArea.x2; c++)
+                      cells.push({ x: c, y: r });
+                  doIgniteBatch(cells);
+                }}
+                style={{ flex: 1, fontSize: '0.72rem' }}
+              >
+                <Flame size={12} /> Ignite
+              </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  const cells: { x: number; y: number }[] = [];
+                  for (let r = selectedArea.y1; r <= selectedArea.y2; r++)
+                    for (let c = selectedArea.x1; c <= selectedArea.x2; c++)
+                      cells.push({ x: c, y: r });
+                  doClearBatch(cells);
+                }}
+                style={{ flex: 1, fontSize: '0.72rem' }}
+              >
+                <Eraser size={12} /> Clear
+              </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => setInitialZone(selectedArea)}
+                style={{ flex: 1, fontSize: '0.72rem' }}
+              >
+                <Target size={12} /> Zone
+              </button>
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={() => setSelectedArea(null)}
+                style={{ flex: 1, fontSize: '0.72rem' }}
+              >
+                ✕
+              </button>
+            </div>
+          </>
+        )}
         {initialZone && (
-          <div style={{ fontSize: '0.68rem', color: 'var(--accent-blue)', marginTop: 2 }}>
+          <div style={{ fontSize: '0.68rem', color: 'var(--accent-blue)', marginTop: 4 }}>
             Zone: ({initialZone.x1},{initialZone.y1}) to ({initialZone.x2},{initialZone.y2}) — fires on next tick
           </div>
         )}

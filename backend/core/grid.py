@@ -78,6 +78,12 @@ class Grid:
                 return True
         return False
 
+    def clear(self, x: int, y: int) -> bool:
+        if 0 <= x < self.size and 0 <= y < self.size:
+            self.fire_mask[x, y] = CELL_STATES["unburned"]
+            return True
+        return False
+
     def reset(self):
         self.fire_mask.fill(CELL_STATES["unburned"])
         self.step = 0

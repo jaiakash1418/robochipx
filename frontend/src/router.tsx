@@ -8,6 +8,7 @@ import WeatherPage from './pages/WeatherPage';
 import HealthPage from './pages/HealthPage';
 import EvaluationPage from './pages/EvaluationPage';
 import AIPage from './pages/AIPage';
+import HackathonPage from './pages/HackathonPage';
 
 export const router = createBrowserRouter([
   {
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
       { path: 'settings', element: <SettingsPage /> },
       { path: 'health', element: <HealthPage /> },
       { path: 'evaluation', element: <EvaluationPage /> },
+      { path: 'hackathon', element: <HackathonPage /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },

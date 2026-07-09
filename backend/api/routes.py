@@ -48,6 +48,15 @@ async def ignite_batch(req: BatchIgniteRequest):
     return {"success": True, "ignited": ignited}
 
 
+@router.post("/clear/batch")
+async def clear_batch(req: BatchIgniteRequest):
+    cleared = 0
+    for cell in req.cells:
+        if simulation.clear(cell.x, cell.y):
+            cleared += 1
+    return {"success": True, "cleared": cleared}
+
+
 @router.post("/zone/set")
 async def set_zone(req: ZoneRequest):
     if req.x1 is None or req.y1 is None or req.x2 is None or req.y2 is None:

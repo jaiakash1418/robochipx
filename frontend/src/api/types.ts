@@ -96,6 +96,8 @@ export interface BatchIgniteRequest {
 }
 
 export type RectangleMode = 'off' | 'ignite' | 'zone';
+export type PaintMode = 'off' | 'fire' | 'clear';
+export type ToolMode = 'off' | 'select';
 
 export type CellState = 0 | 1 | 2;
 

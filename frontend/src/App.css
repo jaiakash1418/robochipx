@@ -1943,6 +1943,253 @@
   gap: 4px;
 }
 
+/* ============ HACKATHON PAGE ============ */
+
+.hackathon-page {
+  padding: 24px;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.hackathon-header {
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+.hackathon-header h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 6px;
+  background: linear-gradient(135deg, var(--accent-fire), #f59e0b, var(--accent-blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hackathon-header p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.hackathon-ai-note {
+  padding: 16px 20px;
+  margin-bottom: 28px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255,107,53,0.08), rgba(59,130,246,0.06));
+  border: 1px solid rgba(255,107,53,0.15);
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+
+.hackathon-ai-note strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+}
+
+.hackathon-ai-note ol {
+  margin: 4px 0 0 18px;
+  padding: 0;
+}
+
+.hackathon-ai-note li {
+  margin-bottom: 2px;
+}
+
+.hackathon-section {
+  margin-bottom: 32px;
+}
+
+.hackathon-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hackathon-card {
+  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  padding: 16px;
+  margin-bottom: 10px;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.hackathon-card:hover {
+  border-color: var(--accent-blue);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+
+.hackathon-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.hackathon-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+}
+
+.hackathon-card-icon.get { background: rgba(59,130,246,0.12); color: #60a5fa; }
+.hackathon-card-icon.post { background: rgba(245,158,11,0.12); color: #fbbf24; }
+.hackathon-card-icon.danger { background: rgba(239,68,68,0.12); color: #ef4444; }
+
+.hackathon-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.hackathon-card-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.hackathon-method {
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  letter-spacing: 0.3px;
+}
+
+.hackathon-method.get { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.hackathon-method.post { background: rgba(245,158,11,0.15); color: #fbbf24; }
+
+.hackathon-path-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-primary);
+}
+
+.hackathon-card-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.hackathon-schemas {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.hackathon-schema-box {
+  flex: 1;
+  min-width: 180px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.hackathon-schema-header {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 4px 8px;
+  color: var(--text-tertiary);
+  background: var(--bg-glass);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hackathon-schema-code {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 0.67rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.hackathon-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hackathon-try-btn {
+  font-size: 0.72rem;
+  padding: 5px 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hackathon-status {
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.hackathon-status.ok { color: var(--accent-green); }
+.hackathon-status.err { color: var(--accent-fire); }
+
+.hackathon-response {
+  margin-top: 10px;
+  border-radius: 8px;
+  background: #0d1117;
+  border: 1px solid rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+
+.hackathon-response-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #8b949e;
+  background: #161b22;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.hackathon-response-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.hackathon-response-dot.json { background: #f0883e; }
+
+.hackathon-response pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 0.7rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  line-height: 1.6;
+  max-height: 240px;
+  overflow: auto;
+  color: #e6edf3;
+}
+
 /* ============ SCROLLBAR ============ */
 
 ::-webkit-scrollbar {
