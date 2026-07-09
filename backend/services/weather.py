@@ -47,10 +47,10 @@ class WeatherService:
             "timestamp": datetime.datetime.utcnow().isoformat(),
         }
 
-    async def get_current(self) -> dict:
+    async def get_current(self, lat: float = None, lon: float = None) -> dict:
         if self.use_live:
             try:
-                return await self.fetch_live()
+                return await self.fetch_live(lat, lon)
             except Exception:
                 return self.get_demo()
         return self.cached if self.cached else self.get_demo()

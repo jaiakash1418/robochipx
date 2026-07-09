@@ -52,3 +52,19 @@ class LLMQueryResponse(BaseModel):
 
 class AlertResponse(BaseModel):
     alerts: list[dict]
+
+
+class CellCoordinate(BaseModel):
+    x: int
+    y: int
+
+
+class BatchIgniteRequest(BaseModel):
+    cells: list[CellCoordinate]
+
+
+class ZoneRequest(BaseModel):
+    x1: int | None = None
+    y1: int | None = None
+    x2: int | None = None
+    y2: int | None = None

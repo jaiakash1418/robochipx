@@ -1,13 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Crop, Flame, Target } from 'lucide-react';
 import { useSimulation } from '../context/SimulationContext';
 import InfoTooltip from './InfoTooltip';
+import LocationPicker from './LocationPicker';
 
 export default function ControlPanel() {
   const { t } = useTranslation();
-  const { state, doTick, doReset, doOverrideWeather, doFetchWeather, doFetchWeatherLive } =
-    useSimulation();
-  const { running, weather } = state;
+  const {
+    state,
+    doTick,
+    doReset,
+    doOverrideWeather,
+    doFetchWeather,
+    doFetchWeatherLive,
+    setRectangleMode,
+  } = useSimulation();
+  const { running, weather, rectangleMode, initialZone } = state;
 
   const [windSpeed, setWindSpeed] = useState(12);
   const [windDir, setWindDir] = useState(135);
@@ -45,6 +54,8 @@ export default function ControlPanel() {
   return (
     <div className="panel control-panel">
       <h3>{t('controls.title')}</h3>
+
+      <LocationPicker />
 
       <div className="control-group">
         <label>
@@ -152,6 +163,40 @@ export default function ControlPanel() {
           {t('controls.tick')}
         </button>
         <InfoTooltip text={t('tooltips.tick')} />
+      </div>
+
+      <div className="control-group" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10, marginTop: 6 }}>
+        <label style={{ marginBottom: 6 }}>
+          <Crop size={14} style={{ marginRight: 4 }} />
+          Rectangle Tool
+          <InfoTooltip text="Click & drag on the map to draw a rectangle. Ignite: instantly fire all cells inside. Zone: marks as fire origin for the next simulation tick." />
+        </label>
+        <div className="button-row" style={{ gap: 4, marginBottom: 4 }}>
+          <button
+            className={`btn btn-sm ${rectangleMode === 'ignite' ? 'btn-primary' : ''}`}
+            onClick={() => setRectangleMode(rectangleMode === 'ignite' ? 'off' : 'ignite')}
+            style={{ flex: 1, fontSize: '0.72rem' }}
+          >
+            <Flame size={12} /> Ignite
+          </button>
+          <button
+            className={`btn btn-sm ${rectangleMode === 'zone' ? 'btn-primary' : ''}`}
+            onClick={() => setRectangleMode(rectangleMode === 'zone' ? 'off' : 'zone')}
+            style={{ flex: 1, fontSize: '0.72rem' }}
+          >
+            <Target size={12} /> Zone
+          </button>
+        </div>
+        {rectangleMode !== 'off' && (
+          <div style={{ fontSize: '0.68rem', color: 'var(--accent-fire)' }}>
+            Drag on the map to draw a {rectangleMode === 'ignite' ? 'fire' : 'zone'} rectangle
+          </div>
+        )}
+        {initialZone && (
+          <div style={{ fontSize: '0.68rem', color: 'var(--accent-blue)', marginTop: 2 }}>
+            Zone: ({initialZone.x1},{initialZone.y1}) to ({initialZone.x2},{initialZone.y2}) — fires on next tick
+          </div>
+        )}
       </div>
 
       <div className="button-row">

@@ -11,19 +11,21 @@ const GRID_SIZE = 64;
 const CANVAS_SIZE = 1024;
 const CELL_SIZE = CANVAS_SIZE / GRID_SIZE;
 
-const GRID_BOUNDS: L.LatLngBoundsExpression = [
-  [37.5, -122.0],
-  [38.5, -121.0],
-];
+const GRID_SOUTH = 37.5;
+const GRID_NORTH = 38.5;
+const GRID_WEST = -122.0;
+const GRID_EAST = -121.0;
 
 function gridToLatLng(cellX: number, cellY: number): [number, number] {
-  const south = 37.5;
-  const north = 38.5;
-  const west = -122.0;
-  const east = -121.0;
-  const lat = north - ((cellY + 0.5) / GRID_SIZE) * (north - south);
-  const lng = west + ((cellX + 0.5) / GRID_SIZE) * (east - west);
+  const lat = GRID_NORTH - ((cellY + 0.5) / GRID_SIZE) * (GRID_NORTH - GRID_SOUTH);
+  const lng = GRID_WEST + ((cellX + 0.5) / GRID_SIZE) * (GRID_EAST - GRID_WEST);
   return [lat, lng];
+}
+
+function latLngToGrid(lat: number, lng: number): { x: number; y: number } {
+  const col = Math.round(((lng - GRID_WEST) / (GRID_EAST - GRID_WEST)) * GRID_SIZE);
+  const row = Math.round(((GRID_NORTH - lat) / (GRID_NORTH - GRID_SOUTH)) * GRID_SIZE);
+  return { x: Math.max(0, Math.min(GRID_SIZE - 1, col)), y: Math.max(0, Math.min(GRID_SIZE - 1, row)) };
 }
 
 export default function MapView() {
@@ -35,8 +37,11 @@ export default function MapView() {
   const windParticlesRef = useRef<{ x: number; y: number; speed: number }[]>([]);
   const perimeterLayerRef = useRef<L.Polygon | null>(null);
   const evacLinesRef = useRef<L.Polyline[]>([]);
-  const { state, doIgnite } = useSimulation();
-  const { fireMask, fuelMap, alerts, weather } = state;
+  const userMarkerRef = useRef<L.Marker | null>(null);
+  const rectLayerRef = useRef<L.Rectangle | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const { state, doIgnite, doIgniteBatch, setInitialZone, setRectangleMode } = useSimulation();
+  const { fireMask, fuelMap, alerts, weather, userLocation, rectangleMode, flyToTarget } = state;
 
   const getPerimeterPoints = useCallback((): [number, number][] => {
     const pts: [number, number][] = [];
@@ -196,11 +201,30 @@ export default function MapView() {
 
     drawWindParticles(ctx, wDir, wSpeed, rad);
 
+    if (userLocation) {
+      const { x, y } = latLngToGrid(userLocation.lat, userLocation.lon);
+      if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.25)';
+        ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 11px monospace';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 4;
+        ctx.fillText(`(${x},${y})`, x * CELL_SIZE + 3, y * CELL_SIZE + 12);
+        ctx.shadowBlur = 0;
+      }
+    }
+
     overlayRef.current?.setUrl(canvas.toDataURL());
 
     updatePerimeter();
     updateEvacuationRoutes();
-  }, [fuelMap, fireMask, weather, updatePerimeter, updateEvacuationRoutes]);
+  }, [fuelMap, fireMask, weather, userLocation, updatePerimeter, updateEvacuationRoutes]);
 
   function drawWindParticles(
     ctx: CanvasRenderingContext2D,
@@ -264,7 +288,7 @@ export default function MapView() {
       { maxZoom: 19, attribution: '&copy; Esri' },
     ).addTo(map);
 
-    const bounds = L.latLngBounds(GRID_BOUNDS);
+    const bounds = L.latLngBounds([[GRID_SOUTH, GRID_WEST], [GRID_NORTH, GRID_EAST]]);
 
     L.rectangle(bounds, {
       color: '#ff6b35',
@@ -278,7 +302,8 @@ export default function MapView() {
     }).addTo(map);
     overlayRef.current = overlay;
 
-    map.on('click', (e: L.LeafletMouseEvent) => {
+    const clickHandler = (e: L.LeafletMouseEvent) => {
+      if (rectangleMode !== 'off') return;
       if (!bounds.contains(e.latlng)) return;
       const latPct =
         (e.latlng.lat - bounds.getSouth()) /
@@ -291,20 +316,143 @@ export default function MapView() {
       if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
         doIgnite(x, y);
       }
-    });
+    };
+    map.on('click', clickHandler);
 
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 100);
 
     return () => {
+      map.removeEventListener('click', clickHandler);
       map.remove();
       mapRef.current = null;
     };
-  }, [doIgnite]);
+  }, [doIgnite, rectangleMode]);
 
   useEffect(() => {
     if (mapRef.current) drawGrid();
   }, [drawGrid]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (userMarkerRef.current) {
+      map.removeLayer(userMarkerRef.current);
+      userMarkerRef.current = null;
+    }
+
+    if (userLocation) {
+      const { x, y } = latLngToGrid(userLocation.lat, userLocation.lon);
+      const icon = L.divIcon({
+        className: 'user-location-marker',
+        html: '<div class="user-location-dot" />',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+      });
+      const marker = L.marker([userLocation.lat, userLocation.lon], { icon }).addTo(map);
+      marker.bindPopup(`<b>Your Location</b><br/>${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}<br/>Grid: (${x}, ${y})`);
+      userMarkerRef.current = marker;
+    }
+  }, [userLocation]);
+
+  /* --- fly to target --- */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !flyToTarget) return;
+    map.flyTo([flyToTarget.lat, flyToTarget.lon], flyToTarget.zoom, { duration: 1.2 });
+  }, [flyToTarget]);
+
+  /* --- rectangle drag tool --- */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const bounds = L.latLngBounds([[GRID_SOUTH, GRID_WEST], [GRID_NORTH, GRID_EAST]]);
+
+    if (rectangleMode === 'off') {
+      if (rectLayerRef.current) {
+        map.removeLayer(rectLayerRef.current);
+        rectLayerRef.current = null;
+      }
+      dragStartRef.current = null;
+      return;
+    }
+
+    const onMouseDown = (e: L.LeafletMouseEvent) => {
+      if (!bounds.contains(e.latlng)) return;
+      const pctX = (e.latlng.lng - GRID_WEST) / (GRID_EAST - GRID_WEST);
+      const pctY = 1 - (e.latlng.lat - GRID_SOUTH) / (GRID_NORTH - GRID_SOUTH);
+      const cx = Math.floor(pctX * GRID_SIZE);
+      const cy = Math.floor(pctY * GRID_SIZE);
+      dragStartRef.current = { x: Math.max(0, Math.min(GRID_SIZE - 1, cx)), y: Math.max(0, Math.min(GRID_SIZE - 1, cy)) };
+    };
+
+    const onMouseMove = (e: L.LeafletMouseEvent) => {
+      if (!dragStartRef.current || !bounds.contains(e.latlng)) return;
+      const pctX = (e.latlng.lng - GRID_WEST) / (GRID_EAST - GRID_WEST);
+      const pctY = 1 - (e.latlng.lat - GRID_SOUTH) / (GRID_NORTH - GRID_SOUTH);
+      const cx = Math.floor(pctX * GRID_SIZE);
+      const cy = Math.floor(pctY * GRID_SIZE);
+      const sx = Math.min(dragStartRef.current.x, Math.max(0, Math.min(GRID_SIZE - 1, cx)));
+      const sy = Math.min(dragStartRef.current.y, Math.max(0, Math.min(GRID_SIZE - 1, cy)));
+      const ex = Math.max(dragStartRef.current.x, Math.max(0, Math.min(GRID_SIZE - 1, cx)));
+      const ey = Math.max(dragStartRef.current.y, Math.max(0, Math.min(GRID_SIZE - 1, cy)));
+
+      if (rectLayerRef.current) map.removeLayer(rectLayerRef.current);
+      const sw = gridToLatLng(sx, ey);
+      const ne = gridToLatLng(ex, sy);
+      rectLayerRef.current = L.rectangle(L.latLngBounds(sw, ne), {
+        color: rectangleMode === 'ignite' ? '#ff4500' : '#3b82f6',
+        weight: 2,
+        fillColor: rectangleMode === 'ignite' ? 'rgba(255,69,0,0.15)' : 'rgba(59,130,246,0.15)',
+        fillOpacity: 1,
+        dashArray: '6,4',
+      }).addTo(map);
+    };
+
+    const onMouseUp = () => {
+      if (!dragStartRef.current) return;
+      dragStartRef.current = null;
+
+      if (!rectLayerRef.current) return;
+      const bounds = rectLayerRef.current.getBounds();
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+
+      const minX = Math.max(0, Math.floor(((sw.lng - GRID_WEST) / (GRID_EAST - GRID_WEST)) * GRID_SIZE));
+      const maxX = Math.min(GRID_SIZE - 1, Math.ceil(((ne.lng - GRID_WEST) / (GRID_EAST - GRID_WEST)) * GRID_SIZE));
+      const minY = Math.max(0, Math.floor(((GRID_NORTH - ne.lat) / (GRID_NORTH - GRID_SOUTH)) * GRID_SIZE));
+      const maxY = Math.min(GRID_SIZE - 1, Math.ceil(((GRID_NORTH - sw.lat) / (GRID_NORTH - GRID_SOUTH)) * GRID_SIZE));
+
+      if (rectangleMode === 'ignite') {
+        const cells: { x: number; y: number }[] = [];
+        for (let row = minY; row <= maxY; row++) {
+          for (let col = minX; col <= maxX; col++) {
+            cells.push({ x: col, y: row });
+          }
+        }
+        if (cells.length > 0) doIgniteBatch(cells);
+      } else if (rectangleMode === 'zone') {
+        setInitialZone({ x1: minX, y1: minY, x2: maxX, y2: maxY });
+      }
+
+      if (rectLayerRef.current) {
+        map.removeLayer(rectLayerRef.current);
+        rectLayerRef.current = null;
+      }
+      setRectangleMode('off');
+    };
+
+    map.on('mousedown', onMouseDown);
+    map.on('mousemove', onMouseMove);
+    map.on('mouseup', onMouseUp);
+
+    return () => {
+      map.off('mousedown', onMouseDown);
+      map.off('mousemove', onMouseMove);
+      map.off('mouseup', onMouseUp);
+    };
+  }, [rectangleMode, doIgniteBatch, setInitialZone, setRectangleMode]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>

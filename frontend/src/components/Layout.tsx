@@ -20,7 +20,7 @@ const links = [
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/weather', label: 'Weather', icon: CloudSun },
   { to: '/alerts', label: 'Alerts', icon: Bell },
-  { to: '/assistant', label: 'AI', icon: Bot },
+  { to: '/assistant', label: 'AI Agent', icon: Bot },
   { to: '/health', label: 'Health', icon: Activity },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];

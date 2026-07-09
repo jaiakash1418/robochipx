@@ -7,6 +7,7 @@ import SettingsPage from './pages/SettingsPage';
 import WeatherPage from './pages/WeatherPage';
 import HealthPage from './pages/HealthPage';
 import EvaluationPage from './pages/EvaluationPage';
+import AIPage from './pages/AIPage';
 
 export const router = createBrowserRouter([
   {
@@ -17,7 +18,7 @@ export const router = createBrowserRouter([
       { path: 'analytics', element: <AnalyticsPage /> },
       { path: 'weather', element: <WeatherPage /> },
       { path: 'alerts', element: <AlertsPage /> },
-      { path: 'assistant', element: <div className="page-placeholder"><h2>AI Console</h2><p>Coming soon</p></div> },
+      { path: 'assistant', element: <AIPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'health', element: <HealthPage /> },
       { path: 'evaluation', element: <EvaluationPage /> },

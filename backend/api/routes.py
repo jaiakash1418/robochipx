@@ -5,9 +5,12 @@ from api.schemas import (
     WeatherOverride,
     LLMQueryRequest,
     LLMQueryResponse,
+    BatchIgniteRequest,
+    ZoneRequest,
 )
 from services.simulation import simulation
 from services.weather import weather_service
+from services.rag import build_rag_context
 from core.alerts import check_alerts
 from core.grid import CELL_STATES
 from config import settings
@@ -34,6 +37,26 @@ async def ignite(req: IgniteRequest):
     return {"success": True, "message": f"Ignited at ({req.x}, {req.y})"}
 
 
+@router.post("/ignite/batch")
+async def ignite_batch(req: BatchIgniteRequest):
+    ignited = 0
+    for cell in req.cells:
+        if simulation.ignite(cell.x, cell.y):
+            ignited += 1
+    if ignited > 0:
+        simulation.running = True
+    return {"success": True, "ignited": ignited}
+
+
+@router.post("/zone/set")
+async def set_zone(req: ZoneRequest):
+    if req.x1 is None or req.y1 is None or req.x2 is None or req.y2 is None:
+        simulation.clear_initial_zone()
+        return {"success": True, "zone": None}
+    simulation.set_initial_zone(req.x1, req.y1, req.x2, req.y2)
+    return {"success": True, "zone": {"x1": req.x1, "y1": req.y1, "x2": req.x2, "y2": req.y2}}
+
+
 @router.post("/simulation/tick")
 async def tick():
     result = await simulation.tick()
@@ -56,10 +79,16 @@ async def get_stats():
     return simulation.grid.get_stats()
 
 
+@router.post("/location/set")
+async def set_location(lat: float = None, lon: float = None):
+    simulation.set_custom_location(lat, lon)
+    return {"success": True, "lat": lat, "lon": lon}
+
+
 @router.get("/weather/live")
-async def get_live_weather():
+async def get_live_weather(lat: float = None, lon: float = None):
     try:
-        weather = await weather_service.fetch_live()
+        weather = await weather_service.fetch_live(lat, lon)
         return weather
     except Exception:
         return weather_service.get_demo()
@@ -77,8 +106,8 @@ async def override_weather(params: WeatherOverride):
 
 
 @router.get("/weather")
-async def get_weather():
-    weather = await weather_service.get_current()
+async def get_weather(lat: float = None, lon: float = None):
+    weather = await weather_service.get_current(lat, lon)
     return weather
 
 
@@ -119,7 +148,11 @@ async def model_evaluate():
 @router.post("/llm/query", response_model=LLMQueryResponse)
 async def llm_query(req: LLMQueryRequest):
     state = simulation._build_response()
-    prompt = _build_llm_prompt(req.query, state)
+    weather_state = await weather_service.get_current()
+    state["weather"] = weather_state
+    state["location"] = req.context if req.context else {}
+    rag_context = build_rag_context(state)
+    prompt = _build_llm_prompt(req.query, rag_context)
 
     try:
         answer = await _call_ollama(prompt)
@@ -127,26 +160,19 @@ async def llm_query(req: LLMQueryRequest):
         try:
             answer = await _call_openai(prompt)
         except Exception:
-            answer = _fallback_response(req.query, state)
+            answer = _fallback_response(req.query, rag_context)
 
     return {"answer": answer}
 
 
-def _build_llm_prompt(query: str, state: dict) -> str:
-    return f"""
-You are a wildfire decision-support assistant.
+def _build_llm_prompt(query: str, context: str) -> str:
+    return f"""You are a wildfire decision-support assistant. Use the simulation data below to answer the user's question. Be concise, specific, and cite data where relevant.
 
-Current simulation state:
-- Step: {state['step']}
-- Active fire fronts: {state['stats']['active_fronts']}
-- Area burned: {state['stats']['percentage_burned']}%
-- Active alerts: {len(state['alerts'])}
-- Simulation running: {state['running']}
+{context}
 
-User query: {query}
+USER QUESTION: {query}
 
-Provide a concise, actionable response based on this data.
-"""
+Provide a clear, actionable response based on the data above."""
 
 
 async def _call_ollama(prompt: str) -> str:
@@ -188,12 +214,5 @@ async def _call_openai(prompt: str) -> str:
         return resp.json()["choices"][0]["message"]["content"]
 
 
-def _fallback_response(query: str, state: dict) -> str:
-    alerts_text = ", ".join(a["message"] for a in state["alerts"]) if state["alerts"] else "No active alerts."
-    return (
-        f"Current simulation at step {state['step']}: "
-        f"{state['stats']['percentage_burned']}% area burned, "
-        f"{state['stats']['active_fronts']} active fire fronts. "
-        f"{alerts_text} "
-        f"The fire is {'spreading' if state['running'] else 'paused'}."
-    )
+def _fallback_response(query: str, context: str) -> str:
+    return f"Here is the current simulation data:\n\n{context}\n\nI couldn't reach the AI model, but based on the data above, please analyze the situation yourself. Your question was: {query}"

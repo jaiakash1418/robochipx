@@ -10,6 +10,7 @@ import type {
   LLMQueryRequest,
   LLMQueryResponse,
   Stats,
+  GridRect,
 } from './types';
 
 let useMock: boolean | null = null;
@@ -61,14 +62,20 @@ export const getStats = async () => {
   return apiClient.get<Stats>('/simulation/stats').then((r) => r.data);
 };
 
-export const getWeather = async () => {
+export const getWeather = async (lat?: number, lon?: number) => {
   if (await isUsingMock()) return { ...mockEngine.weather };
-  return apiClient.get<WeatherResponse>('/weather').then((r) => r.data);
+  const params: Record<string, number> = {};
+  if (lat !== undefined) params.lat = lat;
+  if (lon !== undefined) params.lon = lon;
+  return apiClient.get<WeatherResponse>('/weather', { params }).then((r) => r.data);
 };
 
-export const getWeatherLive = async () => {
+export const getWeatherLive = async (lat?: number, lon?: number) => {
   if (await isUsingMock()) return { ...mockEngine.weather };
-  return apiClient.get<WeatherResponse>('/weather/live').then((r) => r.data);
+  const params: Record<string, number> = {};
+  if (lat !== undefined) params.lat = lat;
+  if (lon !== undefined) params.lon = lon;
+  return apiClient.get<WeatherResponse>('/weather/live', { params }).then((r) => r.data);
 };
 
 export const overrideWeather = async (data: WeatherOverrideRequest) => {
@@ -84,11 +91,31 @@ export const getAlerts = async () => {
   return apiClient.get<AlertsResponse>('/alerts').then((r) => r.data);
 };
 
+export const setBackendLocation = async (lat?: number, lon?: number) => {
+  if (await isUsingMock()) return { success: true, lat, lon };
+  return apiClient.post('/location/set', null, { params: { lat, lon } }).then((r) => r.data);
+};
+
+export const igniteBatch = async (cells: { x: number; y: number }[]) => {
+  if (await isUsingMock()) {
+    for (const c of cells) mockEngine.ignite(c.x, c.y);
+    return;
+  }
+  return apiClient.post('/ignite/batch', { cells }).then((r) => r.data);
+};
+
+export const setInitialZone = async (rect: GridRect | null) => {
+  if (await isUsingMock()) return;
+  const body = rect ?? {};
+  return apiClient.post('/zone/set', body).then((r) => r.data);
+};
+
 export const queryLLM = async (data: LLMQueryRequest) => {
   if (await isUsingMock()) {
     const state = mockEngine.getState();
     const alerts = state.alerts.map((a) => a.message).join(', ') || 'No active alerts.';
-    return { answer: `Current simulation at step ${state.step}: ${state.stats.percentage_burned}% area burned, ${state.stats.active_fronts} active fire fronts. ${alerts} The fire is ${state.running ? 'spreading' : 'paused'}.` } as LLMQueryResponse;
+    const loc = data.context?.lat && data.context?.lon ? `User location: ${data.context.lat}, ${data.context.lon}. ` : '';
+    return { answer: `${loc}Current simulation at step ${state.step}: ${state.stats.percentage_burned}% area burned, ${state.stats.active_fronts} active fire fronts. ${alerts} The fire is ${state.running ? 'spreading' : 'paused'}.` } as LLMQueryResponse;
   }
   return apiClient.post<LLMQueryResponse>('/llm/query', data).then((r) => r.data);
 };

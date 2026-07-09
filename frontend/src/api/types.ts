@@ -64,6 +64,11 @@ export interface AlertsResponse {
   alerts: Alert[];
 }
 
+export interface UserLocation {
+  lat: number;
+  lon: number;
+}
+
 export interface LLMQueryRequest {
   query: string;
   context?: Record<string, unknown>;
@@ -72,6 +77,25 @@ export interface LLMQueryRequest {
 export interface LLMQueryResponse {
   answer: string;
 }
+
+export interface GridRect {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export interface FlyTarget {
+  lat: number;
+  lon: number;
+  zoom: number;
+}
+
+export interface BatchIgniteRequest {
+  cells: { x: number; y: number }[];
+}
+
+export type RectangleMode = 'off' | 'ignite' | 'zone';
 
 export type CellState = 0 | 1 | 2;
 

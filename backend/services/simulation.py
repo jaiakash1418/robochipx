@@ -11,6 +11,19 @@ class SimulationService:
         self.grid = Grid(size=grid_size)
         self.normalizer = Normalizer()
         self.running: bool = False
+        self.custom_lat: float | None = None
+        self.custom_lon: float | None = None
+        self.initial_zone: tuple[int, int, int, int] | None = None
+
+    def set_custom_location(self, lat: float | None, lon: float | None):
+        self.custom_lat = lat
+        self.custom_lon = lon
+
+    def set_initial_zone(self, x1: int, y1: int, x2: int, y2: int):
+        self.initial_zone = (x1, y1, x2, y2)
+
+    def clear_initial_zone(self):
+        self.initial_zone = None
 
     def load_fuel_map(self, path: str):
         self.grid.load_fuel_map(path)
@@ -19,7 +32,14 @@ class SimulationService:
         if not self.running:
             return self._build_response()
 
-        weather = await weather_service.get_current()
+        if self.initial_zone:
+            x1, y1, x2, y2 = self.initial_zone
+            for row in range(y1, y2 + 1):
+                for col in range(x1, x2 + 1):
+                    self.grid.ignite(col, row)
+            self.initial_zone = None
+
+        weather = await weather_service.get_current(self.custom_lat, self.custom_lon)
         input_tensor = self.normalizer.build_input_tensor(
             self.grid.get_grid_array(), weather
         )
@@ -54,6 +74,7 @@ class SimulationService:
     def reset(self):
         self.grid.reset()
         self.running = False
+        self.initial_zone = None
 
     def _build_response(self) -> dict:
         stats = self.grid.get_stats()

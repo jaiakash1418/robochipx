@@ -6,6 +6,10 @@ import type {
   Alert,
   Town,
   CellState,
+  UserLocation,
+  GridRect,
+  FlyTarget,
+  RectangleMode,
 } from '../api/types';
 import * as api from '../api/endpoints';
 
@@ -33,6 +37,12 @@ interface SimulationState {
   error: string | null;
   history: TickResponse[];
   historyIndex: number;
+  userLocation: UserLocation | null;
+  customLat: number | null;
+  customLon: number | null;
+  rectangleMode: RectangleMode;
+  initialZone: GridRect | null;
+  flyToTarget: FlyTarget | null;
 }
 
 type Action =
@@ -42,6 +52,11 @@ type Action =
   | { type: 'PUSH_HISTORY'; payload: TickResponse }
   | { type: 'SCRUB_TO'; payload: number }
   | { type: 'SET_WEATHER'; payload: WeatherResponse }
+  | { type: 'SET_USER_LOCATION'; payload: UserLocation }
+  | { type: 'SET_CUSTOM_LOCATION'; payload: { lat: number | null; lon: number | null } }
+  | { type: 'SET_RECTANGLE_MODE'; payload: RectangleMode }
+  | { type: 'SET_INITIAL_ZONE'; payload: GridRect | null }
+  | { type: 'SET_FLY_TARGET'; payload: FlyTarget | null }
   | { type: 'RESET' };
 
 const initialState: SimulationState = {
@@ -57,6 +72,12 @@ const initialState: SimulationState = {
   error: null,
   history: [],
   historyIndex: -1,
+  userLocation: null,
+  customLat: null,
+  customLon: null,
+  rectangleMode: 'off',
+  initialZone: null,
+  flyToTarget: null,
 };
 
 function reducer(state: SimulationState, action: Action): SimulationState {
@@ -100,6 +121,16 @@ function reducer(state: SimulationState, action: Action): SimulationState {
     }
     case 'SET_WEATHER':
       return { ...state, weather: action.payload };
+    case 'SET_USER_LOCATION':
+      return { ...state, userLocation: action.payload };
+    case 'SET_CUSTOM_LOCATION':
+      return { ...state, customLat: action.payload.lat, customLon: action.payload.lon };
+    case 'SET_RECTANGLE_MODE':
+      return { ...state, rectangleMode: action.payload };
+    case 'SET_INITIAL_ZONE':
+      return { ...state, initialZone: action.payload };
+    case 'SET_FLY_TARGET':
+      return { ...state, flyToTarget: action.payload };
     case 'RESET':
       return { ...initialState };
     default:
@@ -112,14 +143,21 @@ interface SimulationContextValue {
   doTick: () => Promise<void>;
   doIgnite: (x: number, y: number) => Promise<void>;
   doReset: () => Promise<void>;
-  doFetchWeather: () => Promise<void>;
-  doFetchWeatherLive: () => Promise<void>;
+  doFetchWeather: (lat?: number, lon?: number) => Promise<void>;
+  doFetchWeatherLive: (lat?: number, lon?: number) => Promise<void>;
   doOverrideWeather: (data: Partial<WeatherResponse>) => Promise<void>;
   doScrubTo: (index: number) => void;
   saveScenario: (name: string) => void;
   loadScenario: (name: string) => boolean;
   listScenarios: () => string[];
   deleteScenario: (name: string) => void;
+  setUserLocation: (loc: UserLocation) => void;
+  setCustomLocation: (lat: number | null, lon: number | null) => void;
+  requestGps: () => Promise<UserLocation>;
+  setRectangleMode: (mode: RectangleMode) => void;
+  doIgniteBatch: (cells: { x: number; y: number }[]) => Promise<void>;
+  setInitialZone: (zone: GridRect | null) => void;
+  flyToLocation: (lat: number, lon: number, zoom?: number) => void;
 }
 
 const SCENARIOS_KEY = 'wf-scenarios';
@@ -169,18 +207,18 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const doFetchWeather = useCallback(async () => {
+  const doFetchWeather = useCallback(async (lat?: number, lon?: number) => {
     try {
-      const w = await api.getWeather();
+      const w = await api.getWeather(lat ?? undefined, lon ?? undefined);
       dispatch({ type: 'SET_WEATHER', payload: w });
     } catch (err: any) {
       dispatch({ type: 'SET_ERROR', payload: err.message });
     }
   }, []);
 
-  const doFetchWeatherLive = useCallback(async () => {
+  const doFetchWeatherLive = useCallback(async (lat?: number, lon?: number) => {
     try {
-      const w = await api.getWeatherLive();
+      const w = await api.getWeatherLive(lat ?? undefined, lon ?? undefined);
       dispatch({ type: 'SET_WEATHER', payload: w });
     } catch (err: any) {
       dispatch({ type: 'SET_ERROR', payload: err.message });
@@ -198,6 +236,60 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
 
   const doScrubTo = useCallback((index: number) => {
     dispatch({ type: 'SCRUB_TO', payload: index });
+  }, []);
+
+  const setUserLocation = useCallback((loc: UserLocation) => {
+    dispatch({ type: 'SET_USER_LOCATION', payload: loc });
+  }, []);
+
+  const setCustomLocation = useCallback((lat: number | null, lon: number | null) => {
+    dispatch({ type: 'SET_CUSTOM_LOCATION', payload: { lat, lon } });
+  }, []);
+
+  const setRectangleMode = useCallback((mode: RectangleMode) => {
+    dispatch({ type: 'SET_RECTANGLE_MODE', payload: mode });
+  }, []);
+
+  const doIgniteBatch = useCallback(async (cells: { x: number; y: number }[]) => {
+    dispatch({ type: 'SET_LOADING' });
+    try {
+      await api.igniteBatch(cells);
+      const data = await api.tick();
+      dispatch({ type: 'UPDATE_SIMULATION', payload: data });
+      dispatch({ type: 'PUSH_HISTORY', payload: data });
+    } catch (err: any) {
+      dispatch({ type: 'SET_ERROR', payload: err.message });
+    }
+  }, []);
+
+  const setInitialZone = useCallback((zone: GridRect | null) => {
+    api.setInitialZone(zone);
+    dispatch({ type: 'SET_INITIAL_ZONE', payload: zone });
+    if (zone) {
+      dispatch({ type: 'SET_RECTANGLE_MODE', payload: 'off' });
+    }
+  }, []);
+
+  const flyToLocation = useCallback((lat: number, lon: number, zoom: number = 12) => {
+    dispatch({ type: 'SET_FLY_TARGET', payload: { lat, lon, zoom } });
+  }, []);
+
+  const requestGps = useCallback(() => {
+    return new Promise<UserLocation>((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation not available'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const loc: UserLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+          dispatch({ type: 'SET_USER_LOCATION', payload: loc });
+          resolve(loc);
+        },
+        reject,
+        { enableHighAccuracy: true, timeout: 10000 },
+      );
+    });
   }, []);
 
   const saveScenario = useCallback(
@@ -263,6 +355,13 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         loadScenario,
         listScenarios,
         deleteScenario,
+        setUserLocation,
+        setCustomLocation,
+        requestGps,
+        setRectangleMode,
+        doIgniteBatch,
+        setInitialZone,
+        flyToLocation,
       }}
     >
       {children}
