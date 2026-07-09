@@ -1,0 +1,56 @@
+{
+  "app": {
+    "title": "Wildfire Spread Predictor",
+    "subtitle": "AI-powered wildfire simulation & decision support"
+  },
+  "controls": {
+    "title": "Controls",
+    "dataSource": "Data Source",
+    "live": "Live Data",
+    "demo": "Demo Data",
+    "windSpeed": "Wind Speed",
+    "windDir": "Wind Direction",
+    "humidity": "Humidity",
+    "temp": "Temperature",
+    "apply": "Apply",
+    "tick": "Tick",
+    "reset": "Reset",
+    "source": "Source",
+    "timestamp": "Timestamp"
+  },
+  "stats": {
+    "title": "Statistics",
+    "step": "Step",
+    "totalCells": "Total Cells",
+    "burning": "Burning",
+    "burned": "Burned",
+    "burnedPct": "Burned %",
+    "activeFronts": "Active Fronts"
+  },
+  "alerts": {
+    "title": "Alerts",
+    "distance": "Distance",
+    "cells": "cells",
+    "evacuate": "Evacuate"
+  },
+  "chat": {
+    "title": "AI Assistant",
+    "welcome": "Hello! I'm your wildfire assistant. Ask me about fire behavior, risks, or evacuation recommendations.",
+    "placeholder": "Ask a question...",
+    "send": "Send",
+    "you": "You",
+    "assistant": "Assistant",
+    "thinking": "Thinking",
+    "error": "Sorry, I couldn't process your request. Please try again."
+  },
+  "legend": {
+    "title": "Legend",
+    "forest": "Forest",
+    "grass": "Grass",
+    "water": "Water",
+    "town": "Town",
+    "road": "Road/Firebreak",
+    "burning": "Burning",
+    "burned": "Burned"
+  }
+}

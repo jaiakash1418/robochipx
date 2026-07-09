@@ -1,0 +1,56 @@
+{
+  "app": {
+    "title": "山火事拡大予測",
+    "subtitle": "AIによる山火事シミュレーションと意思決定支援"
+  },
+  "controls": {
+    "title": "コントロール",
+    "dataSource": "データソース",
+    "live": "ライブデータ",
+    "demo": "デモデータ",
+    "windSpeed": "風速",
+    "windDir": "風向",
+    "humidity": "湿度",
+    "temp": "気温",
+    "apply": "適用",
+    "tick": "ステップ",
+    "reset": "リセット",
+    "source": "ソース",
+    "timestamp": "タイムスタンプ"
+  },
+  "stats": {
+    "title": "統計",
+    "step": "ステップ",
+    "totalCells": "総セル数",
+    "burning": "燃焼中",
+    "burned": "焼失",
+    "burnedPct": "焼失率",
+    "activeFronts": "活動的前線"
+  },
+  "alerts": {
+    "title": "アラート",
+    "distance": "距離",
+    "cells": "セル",
+    "evacuate": "避難"
+  },
+  "chat": {
+    "title": "AIアシスタント",
+    "welcome": "こんにちは！私は山火事アシスタントです。火災の挙動、リスク、避難推奨について質問してください。",
+    "placeholder": "質問を入力...",
+    "send": "送信",
+    "you": "あなた",
+    "assistant": "アシスタント",
+    "thinking": "考え中",
+    "error": "申し訳ありません、リクエストを処理できませんでした。もう一度お試しください。"
+  },
+  "legend": {
+    "title": "凡例",
+    "forest": "森林",
+    "grass": "草地",
+    "water": "水域",
+    "town": "町",
+    "road": "道路/防火帯",
+    "burning": "燃焼中",
+    "burned": "焼失"
+  }
+}

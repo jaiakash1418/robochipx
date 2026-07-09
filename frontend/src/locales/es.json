@@ -1,0 +1,56 @@
+{
+  "app": {
+    "title": "Predictor de Propagación de Incendios",
+    "subtitle": "Simulación de incendios con IA y apoyo a decisiones"
+  },
+  "controls": {
+    "title": "Controles",
+    "dataSource": "Fuente de Datos",
+    "live": "Datos en Vivo",
+    "demo": "Datos de Demostración",
+    "windSpeed": "Velocidad del Viento",
+    "windDir": "Dirección del Viento",
+    "humidity": "Humedad",
+    "temp": "Temperatura",
+    "apply": "Aplicar",
+    "tick": "Paso",
+    "reset": "Reiniciar",
+    "source": "Fuente",
+    "timestamp": "Marca de Tiempo"
+  },
+  "stats": {
+    "title": "Estadísticas",
+    "step": "Paso",
+    "totalCells": "Celdas Totales",
+    "burning": "Ardiendo",
+    "burned": "Quemadas",
+    "burnedPct": "Quemado %",
+    "activeFronts": "Frentes Activos"
+  },
+  "alerts": {
+    "title": "Alertas",
+    "distance": "Distancia",
+    "cells": "celdas",
+    "evacuate": "Evacuar"
+  },
+  "chat": {
+    "title": "Asistente IA",
+    "welcome": "¡Hola! Soy tu asistente de incendios. Pregúntame sobre comportamiento del fuego, riesgos o recomendaciones de evacuación.",
+    "placeholder": "Haz una pregunta...",
+    "send": "Enviar",
+    "you": "Tú",
+    "assistant": "Asistente",
+    "thinking": "Pensando",
+    "error": "Lo siento, no pude procesar tu solicitud. Intenta de nuevo."
+  },
+  "legend": {
+    "title": "Leyenda",
+    "forest": "Bosque",
+    "grass": "Hierba",
+    "water": "Agua",
+    "town": "Pueblo",
+    "road": "Camino/Cortafuego",
+    "burning": "Ardiendo",
+    "burned": "Quemado"
+  }
+}

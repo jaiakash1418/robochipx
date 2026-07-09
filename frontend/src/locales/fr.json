@@ -1,0 +1,56 @@
+{
+  "app": {
+    "title": "Prédicteur de Propagation des Feux de Forêt",
+    "subtitle": "Simulation d'incendie par IA et aide à la décision"
+  },
+  "controls": {
+    "title": "Contrôles",
+    "dataSource": "Source de Données",
+    "live": "Données en Direct",
+    "demo": "Données de Démo",
+    "windSpeed": "Vitesse du Vent",
+    "windDir": "Direction du Vent",
+    "humidity": "Humidité",
+    "temp": "Température",
+    "apply": "Appliquer",
+    "tick": "Pas",
+    "reset": "Réinitialiser",
+    "source": "Source",
+    "timestamp": "Horodatage"
+  },
+  "stats": {
+    "title": "Statistiques",
+    "step": "Pas",
+    "totalCells": "Cellules Totales",
+    "burning": "En Feu",
+    "burned": "Brûlées",
+    "burnedPct": "Brûlé %",
+    "activeFronts": "Fronts Actifs"
+  },
+  "alerts": {
+    "title": "Alertes",
+    "distance": "Distance",
+    "cells": "cellules",
+    "evacuate": "Évacuer"
+  },
+  "chat": {
+    "title": "Assistant IA",
+    "welcome": "Bonjour ! Je suis votre assistant incendie. Demandez-moi sur le comportement du feu, les risques ou les recommandations d'évacuation.",
+    "placeholder": "Posez une question...",
+    "send": "Envoyer",
+    "you": "Vous",
+    "assistant": "Assistant",
+    "thinking": "Réflexion",
+    "error": "Désolé, je n'ai pas pu traiter votre demande. Veuillez réessayer."
+  },
+  "legend": {
+    "title": "Légende",
+    "forest": "Forêt",
+    "grass": "Herbe",
+    "water": "Eau",
+    "town": "Ville",
+    "road": "Route/Coupe-feu",
+    "burning": "En Feu",
+    "burned": "Brûlé"
+  }
+}

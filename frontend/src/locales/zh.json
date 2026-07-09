@@ -1,0 +1,56 @@
+{
+  "app": {
+    "title": "野火蔓延预测",
+    "subtitle": "AI驱动的野火模拟与决策支持"
+  },
+  "controls": {
+    "title": "控制面板",
+    "dataSource": "数据源",
+    "live": "实时数据",
+    "demo": "演示数据",
+    "windSpeed": "风速",
+    "windDir": "风向",
+    "humidity": "湿度",
+    "temp": "温度",
+    "apply": "应用",
+    "tick": "步进",
+    "reset": "重置",
+    "source": "来源",
+    "timestamp": "时间戳"
+  },
+  "stats": {
+    "title": "统计",
+    "step": "步数",
+    "totalCells": "总网格数",
+    "burning": "燃烧中",
+    "burned": "已烧毁",
+    "burnedPct": "烧毁率",
+    "activeFronts": "活跃火线"
+  },
+  "alerts": {
+    "title": "警报",
+    "distance": "距离",
+    "cells": "格",
+    "evacuate": "疏散方向"
+  },
+  "chat": {
+    "title": "AI助手",
+    "welcome": "您好！我是您的野火助手。请向我询问火灾行为、风险或疏散建议。",
+    "placeholder": "输入问题...",
+    "send": "发送",
+    "you": "您",
+    "assistant": "助手",
+    "thinking": "思考中",
+    "error": "抱歉，无法处理您的请求。请重试。"
+  },
+  "legend": {
+    "title": "图例",
+    "forest": "森林",
+    "grass": "草地",
+    "water": "水域",
+    "town": "城镇",
+    "road": "道路/防火带",
+    "burning": "燃烧中",
+    "burned": "已烧毁"
+  }
+}

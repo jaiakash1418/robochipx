@@ -1,0 +1,56 @@
+{
+  "app": {
+    "title": "Waldbrandausbreitungs-Vorhersage",
+    "subtitle": "KI-gestützte Brandsimulation & Entscheidungshilfe"
+  },
+  "controls": {
+    "title": "Steuerung",
+    "dataSource": "Datenquelle",
+    "live": "Live-Daten",
+    "demo": "Demo-Daten",
+    "windSpeed": "Windgeschwindigkeit",
+    "windDir": "Windrichtung",
+    "humidity": "Luftfeuchtigkeit",
+    "temp": "Temperatur",
+    "apply": "Anwenden",
+    "tick": "Schritt",
+    "reset": "Zurücksetzen",
+    "source": "Quelle",
+    "timestamp": "Zeitstempel"
+  },
+  "stats": {
+    "title": "Statistiken",
+    "step": "Schritt",
+    "totalCells": "Gesamtzellen",
+    "burning": "Brennend",
+    "burned": "Verbrannt",
+    "burnedPct": "Verbrannt %",
+    "activeFronts": "Aktive Fronten"
+  },
+  "alerts": {
+    "title": "Warnungen",
+    "distance": "Entfernung",
+    "cells": "Zellen",
+    "evacuate": "Evakuieren"
+  },
+  "chat": {
+    "title": "KI-Assistent",
+    "welcome": "Hallo! Ich bin Ihr Waldbrand-Assistent. Fragen Sie mich zu Brandverhalten, Risiken oder Evakuierungsempfehlungen.",
+    "placeholder": "Eine Frage stellen...",
+    "send": "Senden",
+    "you": "Sie",
+    "assistant": "Assistent",
+    "thinking": "Denke nach",
+    "error": "Entschuldigung, Ihre Anfrage konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut."
+  },
+  "legend": {
+    "title": "Legende",
+    "forest": "Wald",
+    "grass": "Gras",
+    "water": "Wasser",
+    "town": "Stadt",
+    "road": "Straße/Schneise",
+    "burning": "Brennend",
+    "burned": "Verbrannt"
+  }
+}
