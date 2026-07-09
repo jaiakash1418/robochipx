@@ -93,10 +93,13 @@ async def get_weather(lat: float = None, lon: float = None):
 async def get_live_fires():
     from datetime import datetime, timedelta, timezone
     eonet_url = "https://eonet.gsfc.nasa.gov/api/v3/events?category=wildfires&status=open"
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(eonet_url, timeout=15)
-        data = resp.json()
-    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(eonet_url, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        return {"fires": [], "count": 0}
     fires = []
     for ev in data.get("events", []):
         geo = ev.get("geometry", [])
