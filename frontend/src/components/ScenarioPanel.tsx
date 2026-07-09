@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Save, Upload, Trash2, FileText } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useSimulation } from '../context/SimulationContext';
+import InfoTooltip from './InfoTooltip';
 
 export default function ScenarioPanel() {
+  const { t } = useTranslation();
   const { state, saveScenario, loadScenario, listScenarios, deleteScenario } =
     useSimulation();
-  const { step, stats } = state;
+  const { step } = state;
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [name, setName] = useState('');
 
@@ -33,6 +36,7 @@ export default function ScenarioPanel() {
     <div className="panel scenario-panel">
       <h3>
         <FileText size={14} /> Scenarios
+        <InfoTooltip text={t('tooltips.scenario')} />
       </h3>
 
       <div className="scenario-save-row">

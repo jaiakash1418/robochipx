@@ -43,6 +43,28 @@
     "thinking": "Réflexion",
     "error": "Désolé, je n'ai pas pu traiter votre demande. Veuillez réessayer."
   },
+  "tooltips": {
+    "dataSource": "Démo utilise des valeurs météo statiques (vent=12km/h, 135°, 29°C, 34% humidité). Live récupère les données en temps réel depuis l'API Open-Meteo.",
+    "windSpeed": "Vitesse du vent en km/h. Des valeurs plus élevées accélèrent la propagation du feu dans la direction du vent.",
+    "windDir": "Direction D'OÙ vient le vent (0°=Nord, 90°=Est, 180°=Sud, 270°=Ouest). Le feu se propage plus vite dans le sens du vent.",
+    "humidity": "Pourcentage d'humidité relative. Une humidité plus faible assèche la végétation et augmente l'inflammabilité.",
+    "temp": "Température en degrés Celsius. Des températures plus élevées préchauffent le combustible et accélèrent la propagation.",
+    "apply": "Remplace manuellement les paramètres météo de la simulation. Désactive les mises à jour en direct.",
+    "tick": "Avance la simulation d'un pas. La propagation du feu est calculée selon le type de combustible, la météo et le périmètre actuel.",
+    "reset": "Éteint tous les feux actifs et efface le masque de feu. La carte de combustible reste inchangée.",
+    "stepBtn": "Avance manuellement la simulation d'un pas. Utile pour une analyse étape par étape.",
+    "clearBtn": "Réinitialise la simulation : éteint tous les feux et efface le masque de feu.",
+    "burning": "Nombre de cellules actuellement en feu. Ces cellules propageront le feu aux cellules voisines non brûlées.",
+    "burned": "Nombre de cellules complètement brûlées. Les cellules brûlées ne peuvent plus s'enflammer.",
+    "burnedPct": "Pourcentage de la grille 64x64 (4096 cellules) qui a été brûlé.",
+    "activeFronts": "Nombre de segments de périmètre de feu actifs propagant le feu au combustible adjacent.",
+    "legend": "Légende colorée pour la grille de simulation. Types de combustible : forêt, herbe, eau, ville, route et coupe-feu.",
+    "grid": "Grille de simulation 64x64 sur une carte du monde réel. Cliquez sur une cellule pour allumer un feu.",
+    "gridSize": "La grille de simulation est fixe à 64x64 cellules. Chaque cellule représente environ 1km² dans la région de la Baie de San Francisco.",
+    "scenario": "Sauvegardez et chargez des scénarios de simulation. Sauvegarde le combustible, l'état du feu et la météo.",
+    "timeline": "Faites glisser le curseur pour rejouer la simulation étape par étape. Chaque étape représente une itération de propagation.",
+    "chat": "Demandez à l'assistant IA sur le comportement des incendies, les effets météo, la mécanique de propagation ou les contrôles."
+  },
   "legend": {
     "title": "Légende",
     "forest": "Forêt",

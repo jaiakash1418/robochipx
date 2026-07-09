@@ -1,14 +1,18 @@
 import httpx
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 from api.schemas import (
     IgniteRequest,
-    StateResponse,
     WeatherOverride,
     LLMQueryRequest,
     LLMQueryResponse,
+    BatchIgniteRequest,
+    ZoneRequest,
 )
 from services.simulation import simulation
 from services.weather import weather_service
+from services.firms import firms_service
+from services.rag import build_rag_context
 from core.alerts import check_alerts
 from core.grid import CELL_STATES
 from config import settings
@@ -35,6 +39,35 @@ async def ignite(req: IgniteRequest):
     return {"success": True, "message": f"Ignited at ({req.x}, {req.y})"}
 
 
+@router.post("/ignite/batch")
+async def ignite_batch(req: BatchIgniteRequest):
+    ignited = 0
+    for cell in req.cells:
+        if simulation.ignite(cell.x, cell.y):
+            ignited += 1
+    if ignited > 0:
+        simulation.running = True
+    return {"success": True, "ignited": ignited}
+
+
+@router.post("/clear/batch")
+async def clear_batch(req: BatchIgniteRequest):
+    cleared = 0
+    for cell in req.cells:
+        if simulation.clear(cell.x, cell.y):
+            cleared += 1
+    return {"success": True, "cleared": cleared}
+
+
+@router.post("/zone/set")
+async def set_zone(req: ZoneRequest):
+    if req.x1 is None or req.y1 is None or req.x2 is None or req.y2 is None:
+        simulation.clear_initial_zone()
+        return {"success": True, "zone": None}
+    simulation.set_initial_zone(req.x1, req.y1, req.x2, req.y2)
+    return {"success": True, "zone": {"x1": req.x1, "y1": req.y1, "x2": req.x2, "y2": req.y2}}
+
+
 @router.post("/simulation/tick")
 async def tick():
     result = await simulation.tick()
@@ -57,10 +90,16 @@ async def get_stats():
     return simulation.grid.get_stats()
 
 
+@router.post("/location/set")
+async def set_location(lat: Optional[float] = None, lon: Optional[float] = None):
+    simulation.set_custom_location(lat, lon)
+    return {"success": True, "lat": lat, "lon": lon}
+
+
 @router.get("/weather/live")
-async def get_live_weather():
+async def get_live_weather(lat: float = None, lon: float = None):
     try:
-        weather = await weather_service.fetch_live()
+        weather = await weather_service.fetch_live(lat, lon)
         return weather
     except Exception:
         return weather_service.get_demo()
@@ -79,58 +118,70 @@ async def override_weather(params: WeatherOverride):
 
 @router.get("/weather")
 async def get_weather(lat: float = None, lon: float = None):
-    if lat is not None and lon is not None:
-        try:
-            weather = await weather_service.fetch_live(lat, lon)
-            return weather
-        except Exception:
-            return weather_service.get_demo()
-    weather = await weather_service.get_current()
+    weather = await weather_service.get_current(lat, lon)
     return weather
 
 
-@router.get("/fires/live")
-async def get_live_fires():
-    from datetime import datetime, timedelta, timezone
-    eonet_url = "https://eonet.gsfc.nasa.gov/api/v3/events?category=wildfires&status=open"
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(eonet_url, timeout=15)
-        data = resp.json()
-    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
-    fires = []
-    for ev in data.get("events", []):
-        geo = ev.get("geometry", [])
-        if not geo:
-            continue
-        latest = geo[-1]
-        coords = latest.get("coordinates")
-        if not coords or len(coords) < 2:
-            continue
-        latest_date = latest.get("date")
-        if latest_date:
-            try:
-                dt = datetime.fromisoformat(latest_date.replace("Z", "+00:00"))
-                if dt < cutoff:
-                    continue
-            except ValueError:
-                pass
-        earliest = geo[0]
-        fires.append({
-            "id": ev["id"],
-            "title": ev.get("title", "Unknown"),
-            "description": ev.get("description"),
-            "closed": ev.get("closed"),
-            "latitude": coords[1],
-            "longitude": coords[0],
-            "magnitude": latest.get("magnitudeValue"),
-            "magnitude_unit": latest.get("magnitudeUnit", "acres"),
-            "date": latest_date,
-            "first_detected": earliest.get("date"),
-            "sources": ev.get("sources", []),
+@router.get("/fires/active")
+async def get_active_fires(lat: float = None, lon: float = None, radius: float = 0.5):
+    lat = lat or settings.default_lat
+    lon = lon or settings.default_lon
+    try:
+        fires = await firms_service.nearest_fires(lat, lon, radius)
+        return {"fires": fires, "source": "NASA FIRMS", "api_key_configured": firms_service.is_available()}
+    except Exception as e:
+        return {"fires": [], "source": "NASA FIRMS", "api_key_configured": firms_service.is_available(), "error": str(e)}
+
+
+@router.post("/demo/run")
+async def demo_run(ticks: int = 10, lat: float = None, lon: float = None):
+    simulation.reset()
+    lat = lat or settings.default_lat
+    lon = lon or settings.default_lon
+    simulation.set_custom_location(lat, lon)
+
+    # Fetch live weather
+    try:
+        await weather_service.fetch_live(lat, lon)
+    except Exception:
+        pass
+
+    # Try FIRMS auto-ignite; fall back to grid center
+    try:
+        fires = await firms_service.nearest_fires(lat, lon, radius_deg=0.5, max_results=5)
+    except Exception:
+        fires = []
+
+    if fires:
+        for f in fires:
+            gx = int((f["lon"] - (lon - 0.5)) / 1.0 * 64)
+            gy = int((lat + 0.5 - f["lat"]) / 1.0 * 64)
+            gx = max(0, min(63, gx))
+            gy = max(0, min(63, gy))
+            simulation.grid.ignite(gx, gy)
+    else:
+        simulation.grid.ignite(32, 32)
+
+    simulation.running = True
+    steps = []
+    for _ in range(ticks):
+        result = await simulation.tick()
+        steps.append({
+            "step": result["step"],
+            "burning": result["stats"]["burning"],
+            "burned": result["stats"]["burned"],
+            "percentage_burned": result["stats"]["percentage_burned"],
+            "active_fronts": result["stats"]["active_fronts"],
         })
-    fires.sort(key=lambda f: f.get("date") or "", reverse=True)
-    trimmed = fires[:200]
-    return {"fires": trimmed, "count": len(trimmed)}
+    simulation.running = False
+
+    return {
+        "location": {"lat": lat, "lon": lon},
+        "firms_ignited": len(fires),
+        "ticks": ticks,
+        "final_state": simulation._build_response(),
+        "steps": steps,
+    }
 
 
 @router.get("/alerts")
@@ -143,10 +194,38 @@ async def get_alerts():
     return {"alerts": alerts}
 
 
+@router.get("/model/evaluation")
+async def get_evaluation():
+    import json
+    from pathlib import Path
+    result_path = Path("models/evaluation_results/latest_eval.json")
+    if result_path.exists():
+        return json.loads(result_path.read_text())
+    return {"message": "No evaluation results yet. Run POST /api/model/evaluate first."}
+
+
+@router.post("/model/evaluate")
+async def model_evaluate():
+    try:
+        from evaluate import evaluate as run_eval
+        result = run_eval()
+        if "error" in result:
+            raise HTTPException(500, result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Evaluation failed: {str(e)}")
+
+
 @router.post("/llm/query", response_model=LLMQueryResponse)
 async def llm_query(req: LLMQueryRequest):
     state = simulation._build_response()
-    prompt = _build_llm_prompt(req.query, state)
+    weather_state = await weather_service.get_current()
+    state["weather"] = weather_state
+    state["location"] = req.context if req.context else {}
+    rag_context = build_rag_context(state)
+    prompt = _build_llm_prompt(req.query, rag_context)
 
     try:
         answer = await _call_ollama(prompt)
@@ -154,26 +233,19 @@ async def llm_query(req: LLMQueryRequest):
         try:
             answer = await _call_openai(prompt)
         except Exception:
-            answer = _fallback_response(req.query, state)
+            answer = _fallback_response(req.query, rag_context)
 
     return {"answer": answer}
 
 
-def _build_llm_prompt(query: str, state: dict) -> str:
-    return f"""
-You are a wildfire decision-support assistant.
+def _build_llm_prompt(query: str, context: str) -> str:
+    return f"""You are a wildfire decision-support assistant. Use the simulation data below to answer the user's question. Be concise, specific, and cite data where relevant.
 
-Current simulation state:
-- Step: {state['step']}
-- Active fire fronts: {state['stats']['active_fronts']}
-- Area burned: {state['stats']['percentage_burned']}%
-- Active alerts: {len(state['alerts'])}
-- Simulation running: {state['running']}
+{context}
 
-User query: {query}
+USER QUESTION: {query}
 
-Provide a concise, actionable response based on this data.
-"""
+Provide a clear, actionable response based on the data above."""
 
 
 async def _call_ollama(prompt: str) -> str:
@@ -215,12 +287,5 @@ async def _call_openai(prompt: str) -> str:
         return resp.json()["choices"][0]["message"]["content"]
 
 
-def _fallback_response(query: str, state: dict) -> str:
-    alerts_text = ", ".join(a["message"] for a in state["alerts"]) if state["alerts"] else "No active alerts."
-    return (
-        f"Current simulation at step {state['step']}: "
-        f"{state['stats']['percentage_burned']}% area burned, "
-        f"{state['stats']['active_fronts']} active fire fronts. "
-        f"{alerts_text} "
-        f"The fire is {'spreading' if state['running'] else 'paused'}."
-    )
+def _fallback_response(query: str, context: str) -> str:
+    return f"Here is the current simulation data:\n\n{context}\n\nI couldn't reach the AI model, but based on the data above, please analyze the situation yourself. Your question was: {query}"

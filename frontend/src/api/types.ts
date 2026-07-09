@@ -71,6 +71,11 @@ export interface AlertsResponse {
   alerts: Alert[];
 }
 
+export interface UserLocation {
+  lat: number;
+  lon: number;
+}
+
 export interface LLMQueryRequest {
   query: string;
   context?: Record<string, unknown>;
@@ -79,6 +84,27 @@ export interface LLMQueryRequest {
 export interface LLMQueryResponse {
   answer: string;
 }
+
+export interface GridRect {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export interface FlyTarget {
+  lat: number;
+  lon: number;
+  zoom: number;
+}
+
+export interface BatchIgniteRequest {
+  cells: { x: number; y: number }[];
+}
+
+export type RectangleMode = 'off' | 'ignite' | 'zone';
+export type PaintMode = 'off' | 'fire' | 'clear';
+export type ToolMode = 'off' | 'select';
 
 export type CellState = 0 | 1 | 2;
 
@@ -92,6 +118,14 @@ export const FUEL_COLORS: Record<FuelType, string> = {
   4: '#6b7280',
   5: '#92400e',
 };
+
+export interface DemoRunResponse {
+  location: { lat: number; lon: number };
+  firms_ignited: number;
+  ticks: number;
+  final_state: TickResponse;
+  steps: Array<{ step: number; burning: number; burned: number; percentage_burned: number; active_fronts: number }>;
+}
 
 export const CELL_STATE_COLORS: Record<CellState, string> = {
   0: '',

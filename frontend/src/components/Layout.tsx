@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+=======
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+>>>>>>> main
 import {
   LayoutDashboard,
   BarChart3,
@@ -7,10 +11,13 @@ import {
   Bell,
   Bot,
   Settings,
+  Activity,
+  Beaker,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import * as api from '../api/endpoints';
 import ThemeToggle from './ThemeToggle';
 import LanguageSwitcher from './LanguageSwitcher';
-import { ToastProvider } from '../toast/ToastContext';
 import { useSimulation } from '../context/SimulationContext';
 
 const links = [
@@ -18,7 +25,9 @@ const links = [
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/weather', label: 'Weather', icon: CloudSun },
   { to: '/alerts', label: 'Alerts', icon: Bell },
-  { to: '/assistant', label: 'AI', icon: Bot },
+  { to: '/assistant', label: 'AI Agent', icon: Bot },
+  { to: '/health', label: 'Health', icon: Activity },
+  { to: '/hackathon', label: 'Hackathon', icon: Beaker },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -46,20 +55,49 @@ function TopNav() {
   );
 }
 
+function BackendStatus() {
+  const [online, setOnline] = useState<boolean | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        await api.healthCheck();
+        if (mounted) setOnline(true);
+      } catch {
+        if (mounted) setOnline(false);
+      }
+    };
+    check();
+    const interval = setInterval(check, 15000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, []);
+
+  return (
+    <button
+      className="backend-status-btn"
+      onClick={() => navigate('/health')}
+      title={online === true ? 'Backend connected' : online === false ? 'Backend offline' : 'Checking...'}
+    >
+      <span className={`backend-status-dot ${online === true ? 'online' : online === false ? 'offline' : ''}`} />
+      <span className="backend-status-label">{online === true ? 'Live' : online === false ? 'Offline' : '...'}</span>
+    </button>
+  );
+}
+
 export default function Layout() {
   const location = useLocation();
 
   return (
-    <ToastProvider>
-      <div className="app-layout">
-        <header className="topbar">
-          <div className="topbar-left">
-            <div className="topbar-brand">
-              <img src="/logo.jpeg" alt="Logo" className="brand-logo" />
-              <span className="brand-text">FIRE GUARD</span>
-            </div>
-            <TopNav />
+    <div className="app-layout">
+      <header className="topbar">
+        <div className="topbar-left">
+          <div className="topbar-brand">
+            <img src="/logo.jpeg" alt="Logo" className="brand-logo" />
+            <span className="brand-text">FIRE GUARD</span>
           </div>
+<<<<<<< HEAD
           <div className="topbar-right">
             <ThemeToggle />
             <LanguageSwitcher />
@@ -80,5 +118,19 @@ export default function Layout() {
         </main>
       </div>
     </ToastProvider>
+=======
+          <TopNav />
+        </div>
+        <div className="topbar-right">
+          <BackendStatus />
+          <ThemeToggle />
+          <LanguageSwitcher />
+        </div>
+      </header>
+      <main className="app-content">
+        <Outlet />
+      </main>
+    </div>
+>>>>>>> main
   );
 }

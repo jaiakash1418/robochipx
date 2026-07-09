@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import InfoTooltip from './InfoTooltip';
 
 const ITEMS = [
   { labelKey: 'legend.forest', color: '#2d5a27' },
@@ -15,7 +16,10 @@ export default function Legend() {
 
   return (
     <div className="legend">
-      <h4>{t('legend.title')}</h4>
+      <h4>
+        {t('legend.title')}
+        <InfoTooltip text={t('tooltips.legend')} />
+      </h4>
       <div className="legend-items">
         {ITEMS.map((item) => (
           <div key={item.labelKey} className="legend-item">

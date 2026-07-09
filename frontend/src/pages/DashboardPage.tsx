@@ -1,5 +1,11 @@
+<<<<<<< HEAD
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, RotateCcw, MousePointer2, Square, Move, Flame, Crosshair, X } from 'lucide-react';
+=======
+import { useEffect, useRef } from 'react';
+import { Play, RotateCcw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+>>>>>>> main
 import MapView from '../components/MapView';
 import ControlPanel from '../components/ControlPanel';
 import StatsPanel from '../components/StatsPanel';
@@ -8,6 +14,7 @@ import LLMChat from '../components/LLMChat';
 import Legend from '../components/Legend';
 import TimeScrubber from '../components/TimeScrubber';
 import ScenarioPanel from '../components/ScenarioPanel';
+import InfoTooltip from '../components/InfoTooltip';
 import { useSimulation } from '../context/SimulationContext';
 import type { LiveFire } from '../api/types';
 import { getLiveFires } from '../api/endpoints';
@@ -24,7 +31,12 @@ const GRID_LOCATIONS = [
 ] as const;
 
 export default function DashboardPage() {
+<<<<<<< HEAD
   const { state, doTick, doReset, doFetchWeather, dismissError } = useSimulation();
+=======
+  const { t } = useTranslation();
+  const { state, doTick, doReset } = useSimulation();
+>>>>>>> main
   const { running, loading, error } = state;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [igniteMode, setIgniteMode] = useState<'point' | 'area' | 'move'>('point');
@@ -130,6 +142,7 @@ export default function DashboardPage() {
             >
               <Play size={14} /> Step
             </button>
+            <InfoTooltip text={t('tooltips.stepBtn')} />
             <button
               className="btn map-control-btn"
               onClick={doReset}
@@ -137,6 +150,7 @@ export default function DashboardPage() {
             >
               <RotateCcw size={14} /> Clear
             </button>
+<<<<<<< HEAD
             <button
               className={`btn map-control-btn${showLiveFires ? ' active' : ''}`}
               onClick={() => setShowLiveFires((v) => !v)}
@@ -165,6 +179,9 @@ export default function DashboardPage() {
             >
               <Crosshair size={14} /> {userLocation ? 'Located' : 'Locate'}
             </button>
+=======
+            <InfoTooltip text={t('tooltips.clearBtn')} />
+>>>>>>> main
             {running && (
               <span className="map-live-badge">
                 <span className="live-dot" /> LIVE

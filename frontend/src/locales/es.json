@@ -43,6 +43,28 @@
     "thinking": "Pensando",
     "error": "Lo siento, no pude procesar tu solicitud. Intenta de nuevo."
   },
+  "tooltips": {
+    "dataSource": "Demo usa valores climáticos estáticos (viento=12km/h, 135°, 29°C, 34% humedad). Live obtiene datos en tiempo real de la API Open-Meteo para su ubicación.",
+    "windSpeed": "Velocidad del viento en km/h. Valores más altos causan propagación más rápida del fuego en la dirección del viento.",
+    "windDir": "Dirección DESDE donde sopla el viento (0°=Norte, 90°=Este, 180°=Sur, 270°=Oeste). El fuego se propaga más rápido a favor del viento.",
+    "humidity": "Porcentaje de humedad relativa. Menor humedad seca la vegetación, haciéndola más inflamable.",
+    "temp": "Temperatura en grados Celsius. Temperaturas más altas precalientan el combustible, acelerando la propagación.",
+    "apply": "Sobrescribe manualmente los parámetros climáticos de la simulación. Desactiva las actualizaciones en vivo.",
+    "tick": "Avanza la simulación un paso. La propagación del fuego se calcula según el tipo de combustible, clima y perímetro actual.",
+    "reset": "Extingue todos los fuegos activos y limpia la máscara de fuego. El mapa de combustible permanece sin cambios.",
+    "stepBtn": "Avanza la simulación manualmente un paso. Útil para análisis paso a paso del comportamiento del fuego.",
+    "clearBtn": "Reinicia la simulación: extingue todos los fuegos y limpia la máscara de fuego.",
+    "burning": "Número de celdas actualmente en llamas. Estas celdas propagarán fuego a celdas vecinas no quemadas.",
+    "burned": "Número de celdas completamente quemadas. Las celdas quemadas ya no pueden incendiarse.",
+    "burnedPct": "Porcentaje del total de la cuadrícula 64x64 (4096 celdas) que ha sido quemado.",
+    "activeFronts": "Número de segmentos activos del perímetro del fuego propagándose a combustible adyacente.",
+    "legend": "Leyenda de colores para la cuadrícula de simulación. Tipos de combustible: bosque, hierba, agua, pueblo, carretera y cortafuegos.",
+    "grid": "Cuadrícula de simulación 64x64 sobre un mapa real. Haga clic en cualquier celda para iniciar un fuego.",
+    "gridSize": "La cuadrícula de simulación es fija de 64x64 celdas. Cada celda representa aproximadamente 1km² en el Área de la Bahía de San Francisco.",
+    "scenario": "Guarde y cargue escenarios de simulación. Guarda el mapa de combustible, estado del fuego y clima para reproducir después.",
+    "timeline": "Arrastre el control deslizante para reproducir la simulación paso a paso. Cada paso representa una iteración de propagación.",
+    "chat": "Pregunte al asistente de IA sobre comportamiento de incendios, efectos climáticos, mecánica de propagación o controles de simulación."
+  },
   "legend": {
     "title": "Leyenda",
     "forest": "Bosque",

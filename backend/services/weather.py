@@ -17,19 +17,26 @@ class WeatherService:
         params = {
             "latitude": lat,
             "longitude": lon,
-            "current": "wind_speed_10m,wind_direction_10m,temperature_2m,relative_humidity_2m",
+            "current": "wind_speed_10m,wind_direction_10m,temperature_2m,relative_humidity_2m,precipitation,soil_moisture_0_to_7cm",
+            "daily": "temperature_2m_min,precipitation_sum",
         }
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(settings.open_meteo_url, params=params, timeout=10)
             resp.raise_for_status()
-            data = resp.json()["current"]
+            json_data = resp.json()
+            current = json_data["current"]
+            daily = json_data.get("daily", {})
 
         weather = {
-            "wind_speed": data["wind_speed_10m"],
-            "wind_direction": data["wind_direction_10m"],
-            "temperature": data["temperature_2m"],
-            "humidity": data["relative_humidity_2m"],
+            "wind_speed": current["wind_speed_10m"],
+            "wind_direction": current["wind_direction_10m"],
+            "temperature": current["temperature_2m"],
+            "humidity": current["relative_humidity_2m"],
+            "precipitation": current.get("precipitation", 0.0),
+            "soil_moisture": current.get("soil_moisture_0_to_7cm", 0.0),
+            "temperature_min": daily.get("temperature_2m_min", [current["temperature_2m"]])[0] if daily.get("temperature_2m_min") else current["temperature_2m"],
+            "precipitation_sum": daily.get("precipitation_sum", [0.0])[0] if daily.get("precipitation_sum") else 0.0,
             "source": "open-meteo",
             "timestamp": datetime.datetime.utcnow().isoformat(),
         }
@@ -44,14 +51,18 @@ class WeatherService:
             "wind_direction": 135.0,
             "temperature": 29.0,
             "humidity": 34.0,
+            "precipitation": 0.0,
+            "soil_moisture": 0.3,
+            "temperature_min": 15.0,
+            "precipitation_sum": 0.0,
             "source": "demo",
             "timestamp": datetime.datetime.utcnow().isoformat(),
         }
 
-    async def get_current(self) -> dict:
+    async def get_current(self, lat: float = None, lon: float = None) -> dict:
         if self.use_live:
             try:
-                return await self.fetch_live()
+                return await self.fetch_live(lat, lon)
             except Exception:
                 return self.get_demo()
         return self.cached if self.cached else self.get_demo()

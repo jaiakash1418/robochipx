@@ -1,14 +1,22 @@
 import numpy as np
 from config import settings
+from models.fire_sense_net import FireSenseNet, FUEL_CHANNEL_IDXS, WEATHER_CHANNEL_IDXS
 
 
 class UNetInference:
     def __init__(self):
         self.model = None
         self.device = None
+        self.model_type = settings.model_type
         self._load_model()
 
     def _load_model(self):
+        if self.model_type == "fire_sense_net":
+            self._load_fire_sense_net()
+        else:
+            self._load_unet()
+
+    def _load_unet(self):
         try:
             import torch
             import segmentation_models_pytorch as smp
@@ -26,16 +34,41 @@ class UNetInference:
         except (FileNotFoundError, ImportError):
             self.model = None
 
+    def _load_fire_sense_net(self):
+        try:
+            import torch
+            self.device = torch.device(settings.device)
+            self.model = FireSenseNet(fuel_channels=4, weather_channels=8)
+            checkpoint = torch.load(settings.fire_sense_net_path, map_location=self.device, weights_only=True)
+            if "model_state_dict" in checkpoint:
+                self.model.load_state_dict(checkpoint["model_state_dict"])
+            else:
+                self.model.load_state_dict(checkpoint)
+            self.model.to(self.device)
+            self.model.eval()
+        except (FileNotFoundError, ImportError):
+            self.model = None
+
     def predict(self, input_tensor: np.ndarray, fuel_map: np.ndarray | None = None) -> np.ndarray:
-        if self.model is not None:
-            return self._model_predict(input_tensor)
-        return self._fallback_predict(input_tensor, fuel_map)
+        if self.model is None:
+            return self._fallback_predict(input_tensor, fuel_map)
+        if self.model_type == "fire_sense_net":
+            return self._fire_sense_predict(input_tensor)
+        return self._model_predict(input_tensor)
 
     def _model_predict(self, input_tensor: np.ndarray) -> np.ndarray:
         import torch
         with torch.no_grad():
             tensor = torch.from_numpy(input_tensor).unsqueeze(0).float().to(self.device)
             output = torch.sigmoid(self.model(tensor))
+            return output.squeeze().cpu().numpy()
+
+    def _fire_sense_predict(self, input_tensor: np.ndarray) -> np.ndarray:
+        import torch
+        fuel = torch.from_numpy(input_tensor[FUEL_CHANNEL_IDXS]).unsqueeze(0).float().to(self.device)
+        weather = torch.from_numpy(input_tensor[WEATHER_CHANNEL_IDXS]).unsqueeze(0).float().to(self.device)
+        with torch.no_grad():
+            output = torch.sigmoid(self.model(fuel, weather))
             return output.squeeze().cpu().numpy()
 
     def _fallback_predict(self, input_tensor: np.ndarray, fuel_map: np.ndarray | None = None) -> np.ndarray:

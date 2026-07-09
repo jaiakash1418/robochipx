@@ -1,18 +1,34 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Crop, Flame, Target, Eraser, Play } from 'lucide-react';
 import { useSimulation } from '../context/SimulationContext';
+import InfoTooltip from './InfoTooltip';
+import LocationPicker from './LocationPicker';
 
 export default function ControlPanel() {
   const { t } = useTranslation();
-  const { state, doTick, doReset, doOverrideWeather, doFetchWeather, doFetchWeatherLive } =
-    useSimulation();
-  const { running, weather } = state;
+  const {
+    state,
+    doTick,
+    doReset,
+    doOverrideWeather,
+    doFetchWeather,
+    doFetchWeatherLive,
+    setSelectActive,
+    setSelectedArea,
+    setInitialZone,
+    doIgniteBatch,
+    doClearBatch,
+    doDemoRun,
+  } = useSimulation();
+  const { running, weather, selectActive, selectedArea, initialZone } = state;
 
   const [windSpeed, setWindSpeed] = useState(12);
   const [windDir, setWindDir] = useState(135);
   const [humidity, setHumidity] = useState(34);
   const [temp, setTemp] = useState(29);
   const [useLiveData, setUseLiveData] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   useEffect(() => {
     if (weather) {
@@ -45,8 +61,13 @@ export default function ControlPanel() {
     <div className="panel control-panel">
       <h3>{t('controls.title')}</h3>
 
+      <LocationPicker />
+
       <div className="control-group">
-        <label>{t('controls.dataSource')}</label>
+        <label>
+          {t('controls.dataSource')}
+          <InfoTooltip text={t('tooltips.dataSource')} />
+        </label>
         <button
           onClick={handleToggleLive}
           className={`btn ${useLiveData ? 'btn-primary' : ''}`}
@@ -58,7 +79,10 @@ export default function ControlPanel() {
 
       <div className="control-group">
         <label>
-          <span>{t('controls.windSpeed')}</span>
+          <span>
+            {t('controls.windSpeed')}
+            <InfoTooltip text={t('tooltips.windSpeed')} />
+          </span>
           <span>{windSpeed} km/h</span>
         </label>
         <input
@@ -72,7 +96,10 @@ export default function ControlPanel() {
 
       <div className="control-group">
         <label>
-          <span>{t('controls.windDir')}</span>
+          <span>
+            {t('controls.windDir')}
+            <InfoTooltip text={t('tooltips.windDir')} />
+          </span>
           <span>{windDir}°</span>
         </label>
         <div className="compass" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -101,7 +128,10 @@ export default function ControlPanel() {
 
       <div className="control-group">
         <label>
-          <span>{t('controls.humidity')}</span>
+          <span>
+            {t('controls.humidity')}
+            <InfoTooltip text={t('tooltips.humidity')} />
+          </span>
           <span>{humidity}%</span>
         </label>
         <input
@@ -115,7 +145,10 @@ export default function ControlPanel() {
 
       <div className="control-group">
         <label>
-          <span>{t('controls.temp')}</span>
+          <span>
+            {t('controls.temp')}
+            <InfoTooltip text={t('tooltips.temp')} />
+          </span>
           <span>{temp}°C</span>
         </label>
         <input
@@ -131,15 +164,107 @@ export default function ControlPanel() {
         <button className="btn" onClick={handleOverride} disabled={!running}>
           {t('controls.apply')}
         </button>
+        <InfoTooltip text={t('tooltips.apply')} />
         <button className="btn btn-primary" onClick={() => doTick()} disabled={!running}>
           {t('controls.tick')}
         </button>
+        <InfoTooltip text={t('tooltips.tick')} />
       </div>
 
-      <div className="button-row">
-        <button className="btn btn-danger" onClick={doReset}>
+      <div className="control-group" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10, marginTop: 6 }}>
+        <label style={{ marginBottom: 6 }}>
+          <Crop size={14} style={{ marginRight: 4 }} />
+          Area Selection
+          <InfoTooltip text="Click 'Select' then drag on the map to draw a selection rectangle. After selecting, use the buttons below to ignite, clear, or mark zone." />
+        </label>
+        <button
+          className={`btn ${selectActive ? 'btn-primary' : ''}`}
+          onClick={() => setSelectActive(!selectActive)}
+          style={{ width: '100%', marginBottom: 4, fontSize: '0.78rem' }}
+        >
+          {selectActive ? '✕ Done Selecting' : '✧ Select Area'}
+        </button>
+        {selectActive && (
+          <div style={{ fontSize: '0.68rem', color: 'var(--accent-fire)', marginBottom: 4 }}>
+            Drag on the map to select an area
+          </div>
+        )}
+        {selectedArea && (
+          <>
+            <div style={{ fontSize: '0.68rem', color: 'var(--accent-blue)', marginBottom: 4 }}>
+              Selected: ({selectedArea.x1},{selectedArea.y1}) → ({selectedArea.x2},{selectedArea.y2})
+            </div>
+            <div className="button-row" style={{ gap: 4 }}>
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  const cells: { x: number; y: number }[] = [];
+                  for (let r = selectedArea.y1; r <= selectedArea.y2; r++)
+                    for (let c = selectedArea.x1; c <= selectedArea.x2; c++)
+                      cells.push({ x: c, y: r });
+                  doIgniteBatch(cells);
+                }}
+                style={{ flex: 1, fontSize: '0.72rem' }}
+              >
+                <Flame size={12} /> Ignite
+              </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  const cells: { x: number; y: number }[] = [];
+                  for (let r = selectedArea.y1; r <= selectedArea.y2; r++)
+                    for (let c = selectedArea.x1; c <= selectedArea.x2; c++)
+                      cells.push({ x: c, y: r });
+                  doClearBatch(cells);
+                }}
+                style={{ flex: 1, fontSize: '0.72rem' }}
+              >
+                <Eraser size={12} /> Clear
+              </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => setInitialZone(selectedArea)}
+                style={{ flex: 1, fontSize: '0.72rem' }}
+              >
+                <Target size={12} /> Zone
+              </button>
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={() => setSelectedArea(null)}
+                style={{ flex: 1, fontSize: '0.72rem' }}
+              >
+                ✕
+              </button>
+            </div>
+          </>
+        )}
+        {initialZone && (
+          <div style={{ fontSize: '0.68rem', color: 'var(--accent-blue)', marginTop: 4 }}>
+            Zone: ({initialZone.x1},{initialZone.y1}) to ({initialZone.x2},{initialZone.y2}) — fires on next tick
+          </div>
+        )}
+      </div>
+
+      <div className="button-row" style={{ gap: 4 }}>
+        <button
+          className="btn btn-primary"
+          onClick={async () => {
+            setDemoLoading(true);
+            try {
+              await doDemoRun(10);
+            } finally {
+              setDemoLoading(false);
+            }
+          }}
+          disabled={demoLoading}
+          style={{ flex: 1, fontSize: '0.75rem' }}
+        >
+          <Play size={12} /> {demoLoading ? 'Running...' : 'Run Demo'}
+        </button>
+        <button className="btn btn-danger" onClick={doReset} style={{ flex: 1 }}>
           {t('controls.reset')}
         </button>
+        <InfoTooltip text={t('tooltips.reset')} />
       </div>
 
       {weather && (

@@ -12,6 +12,8 @@ import type {
   LLMQueryResponse,
   FiresResponse,
   Stats,
+  GridRect,
+  DemoRunResponse,
 } from './types';
 
 let useMock: boolean | null = null;
@@ -58,7 +60,7 @@ export const tick = async () => {
 };
 
 export const getState = async () => {
-  if (await isUsingMock()) return mockEngine.tick();
+  if (await isUsingMock()) return mockEngine.getState();
   return apiClient.get<TickResponse>('/simulation/state').then((r) => r.data);
 };
 
@@ -68,7 +70,7 @@ export const resetSimulation = async () => {
 };
 
 export const getStats = async () => {
-  if (await isUsingMock()) return mockEngine.tick().stats;
+  if (await isUsingMock()) return mockEngine.getState().stats;
   return apiClient.get<Stats>('/simulation/stats').then((r) => r.data);
 };
 
@@ -95,22 +97,67 @@ export const overrideWeather = async (data: WeatherOverrideRequest) => {
 
 export const getAlerts = async () => {
   if (await isUsingMock()) {
-    const alerts = mockEngine.tick().alerts;
+    const alerts = mockEngine.getState().alerts;
     return { alerts } as AlertsResponse;
   }
   return apiClient.get<AlertsResponse>('/alerts').then((r) => r.data);
 };
 
-export const getLiveFires = async () => {
-  if (await isUsingMock()) return { fires: [], count: 0 };
-  return apiClient.get<FiresResponse>('/fires/live').then((r) => r.data);
+export const clearBatch = async (cells: { x: number; y: number }[]) => {
+  if (await isUsingMock()) {
+    for (const c of cells) mockEngine.clear(c.x, c.y);
+    return;
+  }
+  return apiClient.post('/clear/batch', { cells }).then((r) => r.data);
+};
+
+export const getEvaluation = async () => {
+  if (await isUsingMock()) return { f1: 0.206, iou: 0.12, samples: [] };
+  return apiClient.get('/model/evaluation').then((r) => r.data);
+};
+
+export const evaluateModel = async () => {
+  if (await isUsingMock()) return { f1: 0.206, iou: 0.12, samples: [] };
+  return apiClient.post('/model/evaluate').then((r) => r.data);
+};
+
+export const setBackendLocation = async (lat?: number, lon?: number) => {
+  if (await isUsingMock()) return { success: true, lat, lon };
+  return apiClient.post('/location/set', null, { params: { lat, lon } }).then((r) => r.data);
+};
+
+export const igniteBatch = async (cells: { x: number; y: number }[]) => {
+  if (await isUsingMock()) {
+    for (const c of cells) mockEngine.ignite(c.x, c.y);
+    return;
+  }
+  return apiClient.post('/ignite/batch', { cells }).then((r) => r.data);
+};
+
+export const setInitialZone = async (rect: GridRect | null) => {
+  if (await isUsingMock()) return;
+  const body = rect ?? {};
+  return apiClient.post('/zone/set', body).then((r) => r.data);
+};
+
+export const runDemo = async (ticks?: number, lat?: number, lon?: number) => {
+  if (await isUsingMock()) {
+    const data = await mockEngine.runDemo(ticks ?? 10, lat, lon);
+    return data;
+  }
+  const params: Record<string, number> = {};
+  if (ticks !== undefined) params.ticks = ticks;
+  if (lat !== undefined) params.lat = lat;
+  if (lon !== undefined) params.lon = lon;
+  return apiClient.post<DemoRunResponse>('/demo/run', null, { params }).then((r) => r.data);
 };
 
 export const queryLLM = async (data: LLMQueryRequest) => {
   if (await isUsingMock()) {
-    const state = mockEngine.tick();
+    const state = mockEngine.getState();
     const alerts = state.alerts.map((a) => a.message).join(', ') || 'No active alerts.';
-    return { answer: `Current simulation at step ${state.step}: ${state.stats.percentage_burned}% area burned, ${state.stats.active_fronts} active fire fronts. ${alerts} The fire is ${state.running ? 'spreading' : 'paused'}.` } as LLMQueryResponse;
+    const loc = data.context?.lat && data.context?.lon ? `User location: ${data.context.lat}, ${data.context.lon}. ` : '';
+    return { answer: `${loc}Current simulation at step ${state.step}: ${state.stats.percentage_burned}% area burned, ${state.stats.active_fronts} active fire fronts. ${alerts} The fire is ${state.running ? 'spreading' : 'paused'}.` } as LLMQueryResponse;
   }
   return apiClient.post<LLMQueryResponse>('/llm/query', data).then((r) => r.data);
 };

@@ -1,7 +1,10 @@
 import { History, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useSimulation } from '../context/SimulationContext';
+import InfoTooltip from './InfoTooltip';
 
 export default function TimeScrubber() {
+  const { t } = useTranslation();
   const { state, doScrubTo } = useSimulation();
   const { history, historyIndex } = state;
 
@@ -12,6 +15,7 @@ export default function TimeScrubber() {
       <div className="scrubber-left">
         <History size={14} />
         <span className="scrubber-label">Timeline</span>
+        <InfoTooltip text={t('tooltips.timeline')} />
       </div>
       <div className="scrubber-controls">
         <button

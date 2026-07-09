@@ -1,4 +1,4 @@
-import type { TickResponse, WeatherResponse, Stats, Alert, Town } from './types';
+import type { TickResponse, WeatherResponse, Stats, Alert, Town, DemoRunResponse } from './types';
 
 const GRID_SIZE = 64;
 const UNBURNED = 0;
@@ -67,6 +67,7 @@ export class MockSimulationEngine {
     return true;
   }
 
+<<<<<<< HEAD
   igniteArea(x1: number, y1: number, x2: number, y2: number) {
     const minX = Math.max(0, Math.min(x1, x2));
     const maxX = Math.min(GRID_SIZE - 1, Math.max(x1, x2));
@@ -83,6 +84,12 @@ export class MockSimulationEngine {
     }
     if (count > 0) this.running = true;
     return count;
+=======
+  clear(x: number, y: number) {
+    if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) return false;
+    this.fireMask[y][x] = UNBURNED;
+    return true;
+>>>>>>> main
   }
 
   reset() {
@@ -205,6 +212,35 @@ export class MockSimulationEngine {
       });
     }
     return alerts;
+  }
+
+  getState(): TickResponse {
+    return this._buildResponse();
+  }
+
+  runDemo(ticks: number = 10, lat?: number, lon?: number): DemoRunResponse {
+    this.reset();
+    this.ignite(32, 32);
+    this.running = true;
+    const steps: DemoRunResponse['steps'] = [];
+    for (let i = 0; i < ticks; i++) {
+      const r = this.tick();
+      steps.push({
+        step: r.step,
+        burning: r.stats.burning,
+        burned: r.stats.burned,
+        percentage_burned: r.stats.percentage_burned,
+        active_fronts: r.stats.active_fronts,
+      });
+    }
+    this.running = false;
+    return {
+      location: { lat: lat ?? 39.8283, lon: lon ?? -98.5795 },
+      firms_ignited: 0,
+      ticks,
+      final_state: this.getState(),
+      steps,
+    };
   }
 
   private _buildResponse(): TickResponse {

@@ -43,6 +43,28 @@
     "thinking": "Thinking",
     "error": "Sorry, I couldn't process your request. Please try again."
   },
+  "tooltips": {
+    "dataSource": "Demo uses static weather values (wind=12km/h, 135°, 29°C, 34% humidity). Live fetches real-time weather from Open-Meteo API for your location.",
+    "windSpeed": "Wind speed in km/h. Higher values cause faster fire spread in the downwind direction and increase spotting distance.",
+    "windDir": "Direction the wind is blowing FROM (0°=North, 90°=East, 180°=South, 270°=West). Fire spreads fastest downwind.",
+    "humidity": "Relative humidity percentage. Lower humidity dries out vegetation fuel, making it more flammable and increasing fire intensity.",
+    "temp": "Temperature in Celsius. Higher temperatures pre-heat fuel ahead of the fire front, accelerating spread rates.",
+    "apply": "Manually override weather parameters for the simulation. This disables live updates and uses your custom values instead.",
+    "tick": "Advance the simulation by one time step. Fire spread is calculated based on fuel type, weather, and current fire perimeter.",
+    "reset": "Extinguish all active fires and clear the entire fire mask. The fuel map and grid remain unchanged.",
+    "stepBtn": "Manually advance the simulation by one tick. Useful for step-by-step analysis of fire spread behavior.",
+    "clearBtn": "Reset the simulation: extinguishes all fires and clears the fire mask. The fuel map remains unchanged.",
+    "burning": "Number of grid cells currently on fire. These cells will spread fire to neighboring unburned cells.",
+    "burned": "Number of grid cells that have been completely burned. Burned cells can no longer ignite.",
+    "burnedPct": "Percentage of the total 64x64 grid (4096 cells) that has been burned.",
+    "activeFronts": "Number of distinct fire perimeter segments actively spreading fire to adjacent fuel.",
+    "legend": "Color-coded legend for the simulation grid. Forest, grass, water, town, road, and firebreak fuel types with burning/burned cell states.",
+    "grid": "64x64 simulation grid over a real-world map. Click any cell to ignite a fire. Fire spreads automatically based on fuel and weather conditions.",
+    "gridSize": "The simulation grid is fixed at 64x64 cells. Each cell represents approximately 1km² covering the San Francisco Bay Area.",
+    "scenario": "Save and load simulation scenarios. Save captures the current fuel map, fire state, and weather for later replay.",
+    "timeline": "Drag the scrubber or use arrow buttons to replay the simulation step-by-step. Each step represents one fire spread iteration.",
+    "chat": "Ask the AI assistant questions about wildfire behavior, weather effects, fire spread mechanics, evacuation strategies, or simulation controls."
+  },
   "legend": {
     "title": "Legend",
     "forest": "Forest",

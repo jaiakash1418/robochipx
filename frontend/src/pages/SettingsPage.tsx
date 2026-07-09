@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSimulation } from '../context/SimulationContext';
+import InfoTooltip from '../components/InfoTooltip';
 
 export default function SettingsPage() {
   const { t } = useTranslation();
@@ -43,7 +44,10 @@ export default function SettingsPage() {
         <div className="panel settings-section">
           <h3>Simulation</h3>
           <div className="settings-field">
-            <label>Grid Size</label>
+            <label>
+              Grid Size
+              <InfoTooltip text={t('tooltips.gridSize')} />
+            </label>
             <span className="settings-value">64 × 64</span>
           </div>
           <div className="settings-field">

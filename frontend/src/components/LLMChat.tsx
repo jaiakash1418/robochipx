@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { queryLLM } from '../api/endpoints';
 import { Bot, Send, X, MessageSquare } from 'lucide-react';
+import InfoTooltip from './InfoTooltip';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -68,6 +69,7 @@ export default function LLMChat() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Bot size={18} />
               <span style={{ fontWeight: 600 }}>{t('chat.title')}</span>
+              <InfoTooltip text={t('tooltips.chat')} />
             </div>
             <button className="btn" onClick={() => setOpen(false)} style={{ padding: '4px 8px', flex: 0 }}>
               <X size={16} />
