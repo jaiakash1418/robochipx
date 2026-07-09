@@ -39,22 +39,6 @@ export default function StatsPanel() {
           <div className="stat-label">{t('stats.totalCells')}</div>
         </div>
         <div className="stat-card">
-<<<<<<< HEAD
-          <div className="stat-value burning"><AnimatedNumber value={stats.burning} /></div>
-          <div className="stat-label">{t('stats.burning')}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value burned"><AnimatedNumber value={stats.burned} /></div>
-          <div className="stat-label">{t('stats.burned')}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value"><AnimatedNumber value={stats.percentage_burned} decimals={1} />%</div>
-          <div className="stat-label">{t('stats.burnedPct')}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value"><AnimatedNumber value={stats.active_fronts} /></div>
-          <div className="stat-label">{t('stats.activeFronts')}</div>
-=======
           <div className="stat-value burning">{stats.burning}</div>
           <div className="stat-label">
             {t('stats.burning')}
@@ -81,7 +65,6 @@ export default function StatsPanel() {
             {t('stats.activeFronts')}
             <InfoTooltip text={t('tooltips.activeFronts')} />
           </div>
->>>>>>> main
         </div>
       </div>
     </div>

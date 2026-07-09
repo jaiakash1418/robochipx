@@ -308,11 +308,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
 
   const doFetchWeather = useCallback(async (lat?: number, lon?: number) => {
     try {
-<<<<<<< HEAD
-      const w = await api.getWeather(lat, lon);
-=======
       const w = await api.getWeather(lat ?? undefined, lon ?? undefined);
->>>>>>> main
       dispatch({ type: 'SET_WEATHER', payload: w });
     } catch (err: any) {
       dispatch({ type: 'SET_ERROR', payload: err.message });
@@ -321,11 +317,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
 
   const doFetchWeatherLive = useCallback(async (lat?: number, lon?: number) => {
     try {
-<<<<<<< HEAD
-      const w = await api.getWeatherLive(lat, lon);
-=======
       const w = await api.getWeatherLive(lat ?? undefined, lon ?? undefined);
->>>>>>> main
       dispatch({ type: 'SET_WEATHER', payload: w });
     } catch (err: any) {
       dispatch({ type: 'SET_ERROR', payload: err.message });

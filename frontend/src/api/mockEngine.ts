@@ -67,7 +67,6 @@ export class MockSimulationEngine {
     return true;
   }
 
-<<<<<<< HEAD
   igniteArea(x1: number, y1: number, x2: number, y2: number) {
     const minX = Math.max(0, Math.min(x1, x2));
     const maxX = Math.min(GRID_SIZE - 1, Math.max(x1, x2));
@@ -84,12 +83,12 @@ export class MockSimulationEngine {
     }
     if (count > 0) this.running = true;
     return count;
-=======
+  }
+
   clear(x: number, y: number) {
     if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) return false;
     this.fireMask[y][x] = UNBURNED;
     return true;
->>>>>>> main
   }
 
   reset() {

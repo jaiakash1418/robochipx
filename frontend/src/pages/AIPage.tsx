@@ -4,6 +4,7 @@ import MapView from '../components/MapView';
 import Legend from '../components/Legend';
 import { useSimulation } from '../context/SimulationContext';
 import { queryLLM } from '../api/endpoints';
+import type { LiveFire } from '../api/types';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -20,6 +21,12 @@ export default function AIPage() {
   const [showMap, setShowMap] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [gridCenter, setGridCenter] = useState<[number, number]>([38, -121.5]);
+  const [flyToFire, setFlyToFire] = useState<[number, number] | null>(null);
+  const liveFires: LiveFire[] = [];
+  const userLocation: [number, number] | null = state.userLocation
+    ? [state.userLocation.lat, state.userLocation.lon]
+    : null;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -66,7 +73,15 @@ export default function AIPage() {
         {showMap && (
           <div className="ai-page-map">
             <div className="ai-page-map-inner">
-              <MapView />
+              <MapView
+                igniteMode="point"
+                gridCenter={gridCenter}
+                onGridCenterChange={setGridCenter}
+                liveFires={liveFires}
+                flyToFire={flyToFire}
+                onFlyDone={() => setFlyToFire(null)}
+                userLocation={userLocation}
+              />
               <Legend />
             </div>
           </div>

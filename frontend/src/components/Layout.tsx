@@ -1,9 +1,5 @@
-<<<<<<< HEAD
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-=======
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
->>>>>>> main
 import {
   LayoutDashboard,
   BarChart3,
@@ -97,28 +93,6 @@ export default function Layout() {
             <img src="/logo.jpeg" alt="Logo" className="brand-logo" />
             <span className="brand-text">FIRE GUARD</span>
           </div>
-<<<<<<< HEAD
-          <div className="topbar-right">
-            <ThemeToggle />
-            <LanguageSwitcher />
-          </div>
-        </header>
-        <main className="app-content">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
-        </main>
-      </div>
-    </ToastProvider>
-=======
           <TopNav />
         </div>
         <div className="topbar-right">
@@ -128,9 +102,18 @@ export default function Layout() {
         </div>
       </header>
       <main className="app-content">
-        <Outlet />
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Outlet />
+          </motion.div>
+        </AnimatePresence>
       </main>
     </div>
->>>>>>> main
   );
 }

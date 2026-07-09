@@ -10,10 +10,10 @@ import type {
   AlertsResponse,
   LLMQueryRequest,
   LLMQueryResponse,
-  FiresResponse,
   Stats,
   GridRect,
   DemoRunResponse,
+  FiresResponse,
 } from './types';
 
 let useMock: boolean | null = null;
@@ -101,6 +101,11 @@ export const getAlerts = async () => {
     return { alerts } as AlertsResponse;
   }
   return apiClient.get<AlertsResponse>('/alerts').then((r) => r.data);
+};
+
+export const getLiveFires = async () => {
+  if (await isUsingMock()) return { fires: [], count: 0 } as unknown as FiresResponse;
+  return apiClient.get<FiresResponse>('/fires/live').then((r) => r.data);
 };
 
 export const clearBatch = async (cells: { x: number; y: number }[]) => {
