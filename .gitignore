@@ -1,0 +1,15 @@
+# Datasets (raw TFRecords are huge binary files)
+datasets/next-day-wildfire-spread/
+datasets/*.tfrecord
+datasets/*.tfrecord.gz
+
+# Converted training data
+datasets/converted/
+
+# Training artifacts
+notebooks/*.ipynb
+training/__pycache__/
+
+# OS
+Thumbs.db
+.DS_Store

@@ -1,0 +1,17 @@
+{
+  "size": 64,
+  "fuel_map": [],
+  "towns": [
+    {"x": 10, "y": 10, "name": "Lakewood"},
+    {"x": 45, "y": 50, "name": "Pine Valley"},
+    {"x": 30, "y": 15, "name": "Riverside"}
+  ],
+  "fuel_colors": {
+    "forest": "#2d5a27",
+    "grass": "#9acd32",
+    "water": "#4682b4",
+    "town": "#d2b48c",
+    "road": "#555555",
+    "firebreak": "#444444"
+  }
+}
