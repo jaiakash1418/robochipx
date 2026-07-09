@@ -59,8 +59,11 @@ async def get_stats():
 
 @router.get("/weather/live")
 async def get_live_weather():
-    weather = await weather_service.fetch_live()
-    return weather
+    try:
+        weather = await weather_service.fetch_live()
+        return weather
+    except Exception:
+        return weather_service.get_demo()
 
 
 @router.post("/weather/override")

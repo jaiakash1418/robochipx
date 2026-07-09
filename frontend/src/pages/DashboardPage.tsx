@@ -14,7 +14,7 @@ const TICK_INTERVAL = 2000;
 
 export default function DashboardPage() {
   const { state, doTick, doReset } = useSimulation();
-  const { running } = state;
+  const { running, loading, error } = state;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -39,6 +39,17 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard-page">
+      {loading && (
+        <div className="dashboard-loading-overlay">
+          <div className="dashboard-loading-spinner" />
+          <span> Processing...</span>
+        </div>
+      )}
+      {error && (
+        <div className="dashboard-error-banner">
+          <span>{error}</span>
+        </div>
+      )}
       <div className="dashboard-map-area">
         <div className="dashboard-map">
           <div className="map-overlay-controls">

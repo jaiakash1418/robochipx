@@ -37,11 +37,19 @@ class Grid:
         if p.exists():
             with open(p) as f:
                 data = json.load(f)
-            self.size = data.get("size", self.size)
-            self.fuel_map = np.array(data["fuel_map"], dtype=np.int8)
-            self.towns = data.get("towns", [])
+            loaded = np.array(data.get("fuel_map", []), dtype=np.int8)
+            expected_size = data.get("size", self.size)
+            if loaded.ndim == 2 and loaded.shape[0] == expected_size and loaded.shape[1] == expected_size:
+                self.size = expected_size
+                self.fuel_map = loaded
+                self.towns = data.get("towns", [])
+            else:
+                self._init_empty()
+                self._generate_synthetic()
+                self.towns = data.get("towns", self.towns)
             self.fire_mask = np.zeros((self.size, self.size), dtype=np.int8)
         else:
+            self._init_empty()
             self._generate_synthetic()
 
     def _generate_synthetic(self):
