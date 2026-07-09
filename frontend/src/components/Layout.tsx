@@ -13,7 +13,6 @@ import { useState, useEffect } from 'react';
 import * as api from '../api/endpoints';
 import ThemeToggle from './ThemeToggle';
 import LanguageSwitcher from './LanguageSwitcher';
-import { ToastProvider } from '../toast/ToastContext';
 import { useSimulation } from '../context/SimulationContext';
 
 const links = [
@@ -84,26 +83,24 @@ function BackendStatus() {
 
 export default function Layout() {
   return (
-    <ToastProvider>
-      <div className="app-layout">
-        <header className="topbar">
-          <div className="topbar-left">
-            <div className="topbar-brand">
-              <img src="/logo.jpeg" alt="Logo" className="brand-logo" />
-              <span className="brand-text">FIRE GUARD</span>
-            </div>
-            <TopNav />
+    <div className="app-layout">
+      <header className="topbar">
+        <div className="topbar-left">
+          <div className="topbar-brand">
+            <img src="/logo.jpeg" alt="Logo" className="brand-logo" />
+            <span className="brand-text">FIRE GUARD</span>
           </div>
-          <div className="topbar-right">
-            <BackendStatus />
-            <ThemeToggle />
-            <LanguageSwitcher />
-          </div>
-        </header>
-        <main className="app-content">
-          <Outlet />
-        </main>
-      </div>
-    </ToastProvider>
+          <TopNav />
+        </div>
+        <div className="topbar-right">
+          <BackendStatus />
+          <ThemeToggle />
+          <LanguageSwitcher />
+        </div>
+      </header>
+      <main className="app-content">
+        <Outlet />
+      </main>
+    </div>
   );
 }

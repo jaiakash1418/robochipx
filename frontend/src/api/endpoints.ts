@@ -11,6 +11,7 @@ import type {
   LLMQueryResponse,
   Stats,
   GridRect,
+  DemoRunResponse,
 } from './types';
 
 let useMock: boolean | null = null;
@@ -126,6 +127,18 @@ export const setInitialZone = async (rect: GridRect | null) => {
   if (await isUsingMock()) return;
   const body = rect ?? {};
   return apiClient.post('/zone/set', body).then((r) => r.data);
+};
+
+export const runDemo = async (ticks?: number, lat?: number, lon?: number) => {
+  if (await isUsingMock()) {
+    const data = await mockEngine.runDemo(ticks ?? 10, lat, lon);
+    return data;
+  }
+  const params: Record<string, number> = {};
+  if (ticks !== undefined) params.ticks = ticks;
+  if (lat !== undefined) params.lat = lat;
+  if (lon !== undefined) params.lon = lon;
+  return apiClient.post<DemoRunResponse>('/demo/run', null, { params }).then((r) => r.data);
 };
 
 export const queryLLM = async (data: LLMQueryRequest) => {

@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     app_name: str = "Wildfire Spread Predictor"
     app_version: str = "1.0.0"
     debug: bool = True
+    host: str = "0.0.0.0"
+    port: int = 8000
 
     grid_size: int = 64
     cell_size_meters: int = 500

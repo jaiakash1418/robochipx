@@ -8,7 +8,7 @@ export default function ScenarioPanel() {
   const { t } = useTranslation();
   const { state, saveScenario, loadScenario, listScenarios, deleteScenario } =
     useSimulation();
-  const { step, stats } = state;
+  const { step } = state;
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [name, setName] = useState('');
 

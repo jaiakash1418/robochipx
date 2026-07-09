@@ -60,7 +60,9 @@ class SimulationService:
         wind_dir = weather.get("wind_direction", 0.0)
         humidity = weather.get("humidity", 50.0)
 
-        threshold = 0.5 - (wind_speed / 100.0) + (1.0 - humidity / 100.0) * 0.2
+        p_max = float(prob_map.max())
+        base_threshold = max(0.25, p_max * 0.65) if p_max > 0.1 else 0.5
+        threshold = base_threshold - (wind_speed / 100.0) + (1.0 - humidity / 100.0) * 0.2
         threshold = float(np.clip(threshold, 0.15, 0.6))
 
         burning = self.grid.fire_mask == 1
@@ -96,8 +98,17 @@ class SimulationService:
 
         new_fire = (prob_map >= adj_threshold) & (self.grid.fire_mask == 0) & neighbors & ~water
 
+        if burning.any() and not new_fire.any():
+            candidates = neighbors & ~water & (self.grid.fire_mask == 0)
+            if candidates.any():
+                best = np.unravel_index(np.argmax(prob_map * candidates), prob_map.shape)
+                new_fire[best] = True
+
         self.grid.fire_mask[burning] = 2
         self.grid.fire_mask[new_fire] = 1
+
+        if not (self.grid.fire_mask == 1).any():
+            self.running = False
 
     def ignite(self, x: int, y: int) -> bool:
         return self.grid.ignite(x, y)

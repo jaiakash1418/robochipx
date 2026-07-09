@@ -112,6 +112,14 @@ export const FUEL_COLORS: Record<FuelType, string> = {
   5: '#92400e',
 };
 
+export interface DemoRunResponse {
+  location: { lat: number; lon: number };
+  firms_ignited: number;
+  ticks: number;
+  final_state: TickResponse;
+  steps: Array<{ step: number; burning: number; burned: number; percentage_burned: number; active_fronts: number }>;
+}
+
 export const CELL_STATE_COLORS: Record<CellState, string> = {
   0: '',
   1: '#ff6b35',

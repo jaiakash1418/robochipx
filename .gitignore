@@ -10,6 +10,15 @@ datasets/converted/
 notebooks/*.ipynb
 training/__pycache__/
 
+# Environment files
+.env
+
 # OS
 Thumbs.db
 .DS_Store
+
+# Demo artifacts
+demo/outputs/
+demo/*.png
+demo/*.mp4
+demo/__pycache__/

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Crop, Flame, Target, Eraser } from 'lucide-react';
+import { Crop, Flame, Target, Eraser, Play } from 'lucide-react';
 import { useSimulation } from '../context/SimulationContext';
 import InfoTooltip from './InfoTooltip';
 import LocationPicker from './LocationPicker';
@@ -19,6 +19,7 @@ export default function ControlPanel() {
     setInitialZone,
     doIgniteBatch,
     doClearBatch,
+    doDemoRun,
   } = useSimulation();
   const { running, weather, selectActive, selectedArea, initialZone } = state;
 
@@ -27,6 +28,7 @@ export default function ControlPanel() {
   const [humidity, setHumidity] = useState(34);
   const [temp, setTemp] = useState(29);
   const [useLiveData, setUseLiveData] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   useEffect(() => {
     if (weather) {
@@ -243,8 +245,23 @@ export default function ControlPanel() {
         )}
       </div>
 
-      <div className="button-row">
-        <button className="btn btn-danger" onClick={doReset}>
+      <div className="button-row" style={{ gap: 4 }}>
+        <button
+          className="btn btn-primary"
+          onClick={async () => {
+            setDemoLoading(true);
+            try {
+              await doDemoRun(10);
+            } finally {
+              setDemoLoading(false);
+            }
+          }}
+          disabled={demoLoading}
+          style={{ flex: 1, fontSize: '0.75rem' }}
+        >
+          <Play size={12} /> {demoLoading ? 'Running...' : 'Run Demo'}
+        </button>
+        <button className="btn btn-danger" onClick={doReset} style={{ flex: 1 }}>
           {t('controls.reset')}
         </button>
         <InfoTooltip text={t('tooltips.reset')} />

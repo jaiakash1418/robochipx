@@ -51,7 +51,7 @@ export default function MapView() {
     for (let row = 0; row < GRID_SIZE; row++) {
       for (let col = 0; col < GRID_SIZE; col++) {
         const cs = fireMask[row]?.[col] as CellState | undefined;
-        if (!cs || cs === 0) continue;
+        if (cs === undefined || cs === 0) continue;
 
         const neighbors = [
           [row - 1, col],
@@ -66,7 +66,7 @@ export default function MapView() {
             break;
           }
           const ns = fireMask[nr]?.[nc] as CellState | undefined;
-          if (!ns || ns === 0) {
+          if (ns === undefined || ns === 0) {
             pts.push(gridToLatLng(col, row));
             break;
           }
@@ -182,7 +182,7 @@ export default function MapView() {
         }
 
         const cellState = fireMask[row]?.[col] as CellState | undefined;
-        if (cellState && cellState !== 0) {
+        if (cellState !== undefined && cellState !== 0) {
           color = cellState === 1 ? '#ff6b35' : '#1a1a1a';
           if (cellState === 1) {
             ctx.shadowColor = 'rgba(255,107,53,0.4)';

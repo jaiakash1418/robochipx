@@ -36,7 +36,7 @@ function computeFuelDistribution(fuelMap: number[][]): { name: string; value: nu
 
 export default function AnalyticsPage() {
   const { state } = useSimulation();
-  const { stats, history, fuelMap } = state;
+  const { stats, history, fuelMap, step } = state;
 
   const burnData = history.length >= 2
     ? history.map((h) => ({
@@ -44,8 +44,8 @@ export default function AnalyticsPage() {
         burned: h.stats.percentage_burned,
         burning: h.stats.burning,
       }))
-    : stats.step > 0
-      ? [{ step: stats.step, burned: stats.percentage_burned, burning: stats.burning }]
+    : step > 0
+      ? [{ step, burned: stats.percentage_burned, burning: stats.burning }]
       : [];
 
   const fuelData = fuelMap.length > 0 ? computeFuelDistribution(fuelMap) : [];

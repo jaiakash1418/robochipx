@@ -11,6 +11,7 @@ import type {
   FlyTarget,
   RectangleMode,
   PaintMode,
+  DemoRunResponse,
 } from '../api/types';
 import * as api from '../api/endpoints';
 import { useWebSocket, type WsMessage } from '../hooks/useWebSocket';
@@ -197,6 +198,7 @@ interface SimulationContextValue {
   doClearBatch: (cells: { x: number; y: number }[]) => Promise<void>;
   setInitialZone: (zone: GridRect | null) => void;
   flyToLocation: (lat: number, lon: number, zoom?: number) => void;
+  doDemoRun: (ticks?: number, lat?: number, lon?: number) => Promise<DemoRunResponse>;
   doLLMQuery: (query: string, context?: Record<string, unknown>) => void;
   clearLLM: () => void;
 }
@@ -426,6 +428,19 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     });
   }, [connected, send]);
 
+  const doDemoRun = useCallback(async (ticks: number = 10, lat?: number, lon?: number) => {
+    dispatch({ type: 'SET_LOADING' });
+    try {
+      const result = await api.runDemo(ticks, lat, lon);
+      dispatch({ type: 'UPDATE_SIMULATION', payload: result.final_state });
+      dispatch({ type: 'PUSH_HISTORY', payload: result.final_state });
+      return result;
+    } catch (err: any) {
+      dispatch({ type: 'SET_ERROR', payload: err.message });
+      throw err;
+    }
+  }, []);
+
   const doLLMQuery = useCallback((query: string, context?: Record<string, unknown>) => {
     dispatch({ type: 'LLM_CLEAR' });
     if (connected) {
@@ -518,6 +533,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         doClearBatch,
         setInitialZone,
         flyToLocation,
+        doDemoRun,
         doLLMQuery,
         clearLLM,
       }}

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useSimulation } from '../context/SimulationContext';
-import type { Alert } from '../api/types';
 import { Filter, AlertTriangle, ArrowUpRight } from 'lucide-react';
 
 type SeverityFilter = 'all' | 'danger' | 'warning';

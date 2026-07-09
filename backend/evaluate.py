@@ -11,6 +11,7 @@ from torch.utils.data import Dataset, DataLoader
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 from config import settings
+from models.fire_sense_net import FUEL_CHANNEL_IDXS, WEATHER_CHANNEL_IDXS
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "datasets" / "converted"
 MODEL_PATH = Path(settings.model_path)
@@ -54,19 +55,35 @@ def metrics(pred_bin, target):
 
 def load_model():
     try:
-        import segmentation_models_pytorch as smp
         device = torch.device(settings.device)
-        model = smp.Unet(
-            encoder_name="resnet34",
-            encoder_weights=None,
-            in_channels=settings.input_channels,
-            classes=1,
-        )
-        checkpoint = torch.load(MODEL_PATH, map_location=device)
-        model.load_state_dict(checkpoint)
+
+        if settings.model_type == "fire_sense_net":
+            from models.fire_sense_net import FireSenseNet
+
+            model = FireSenseNet(fuel_channels=4, weather_channels=8)
+            ckpt_path = Path(settings.fire_sense_net_path)
+            checkpoint = torch.load(ckpt_path, map_location=device, weights_only=True)
+            if "model_state_dict" in checkpoint:
+                model.load_state_dict(checkpoint["model_state_dict"])
+            else:
+                model.load_state_dict(checkpoint)
+            model_name = "FireSenseNet"
+        else:
+            import segmentation_models_pytorch as smp
+
+            model = smp.Unet(
+                encoder_name="resnet34",
+                encoder_weights=None,
+                in_channels=settings.input_channels,
+                classes=1,
+            )
+            checkpoint = torch.load(MODEL_PATH, map_location=device)
+            model.load_state_dict(checkpoint)
+            model_name = "ResNet34-UNet"
+
         model.to(device)
         model.eval()
-        return model, device, "ResNet34-UNet"
+        return model, device, model_name
     except (ImportError, FileNotFoundError) as e:
         print(f"Error loading model: {e}")
         return None, None, None
@@ -94,7 +111,12 @@ def evaluate():
     with torch.no_grad():
         for batch_idx, (inputs, labels) in enumerate(loader):
             inputs, labels = inputs.to(device), labels.to(device)
-            outputs = torch.sigmoid(model(inputs))
+            if settings.model_type == "fire_sense_net":
+                fuel = inputs[:, FUEL_CHANNEL_IDXS]
+                weather = inputs[:, WEATHER_CHANNEL_IDXS]
+                outputs = torch.sigmoid(model(fuel, weather))
+            else:
+                outputs = torch.sigmoid(model(inputs))
             pred_bin = (outputs > 0.5).float()
 
             for i in range(inputs.size(0)):
@@ -111,12 +133,12 @@ def evaluate():
                     fire_mask = inputs[i, 0].cpu().numpy()
                     prob = outputs[i, 0].cpu().numpy()
                     gt = labels[i, 0].cpu().numpy()
-                    pred = pred_bin[i, 0].cpu().numpy()
+                    pred = pred_bin[i, 0]
 
                     sample_images.append({
                         "fire_mask": fire_mask.tolist(),
                         "prediction_prob": np.round(prob, 4).tolist(),
-                        "prediction_bin": pred.tolist(),
+                        "prediction_bin": pred.cpu().numpy().tolist(),
                         "ground_truth": gt.tolist(),
                         "metrics": metrics(pred, labels[i, 0]),
                     })

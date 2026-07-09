@@ -1,4 +1,5 @@
 import httpx
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 from api.schemas import (
     IgniteRequest,
@@ -10,6 +11,7 @@ from api.schemas import (
 )
 from services.simulation import simulation
 from services.weather import weather_service
+from services.firms import firms_service
 from services.rag import build_rag_context
 from core.alerts import check_alerts
 from core.grid import CELL_STATES
@@ -89,7 +91,7 @@ async def get_stats():
 
 
 @router.post("/location/set")
-async def set_location(lat: float = None, lon: float = None):
+async def set_location(lat: Optional[float] = None, lon: Optional[float] = None):
     simulation.set_custom_location(lat, lon)
     return {"success": True, "lat": lat, "lon": lon}
 
@@ -118,6 +120,68 @@ async def override_weather(params: WeatherOverride):
 async def get_weather(lat: float = None, lon: float = None):
     weather = await weather_service.get_current(lat, lon)
     return weather
+
+
+@router.get("/fires/active")
+async def get_active_fires(lat: float = None, lon: float = None, radius: float = 0.5):
+    lat = lat or settings.default_lat
+    lon = lon or settings.default_lon
+    try:
+        fires = await firms_service.nearest_fires(lat, lon, radius)
+        return {"fires": fires, "source": "NASA FIRMS", "api_key_configured": firms_service.is_available()}
+    except Exception as e:
+        return {"fires": [], "source": "NASA FIRMS", "api_key_configured": firms_service.is_available(), "error": str(e)}
+
+
+@router.post("/demo/run")
+async def demo_run(ticks: int = 10, lat: float = None, lon: float = None):
+    simulation.reset()
+    lat = lat or settings.default_lat
+    lon = lon or settings.default_lon
+    simulation.set_custom_location(lat, lon)
+
+    # Fetch live weather
+    try:
+        await weather_service.fetch_live(lat, lon)
+    except Exception:
+        pass
+
+    # Try FIRMS auto-ignite; fall back to grid center
+    try:
+        fires = await firms_service.nearest_fires(lat, lon, radius_deg=0.5, max_results=5)
+    except Exception:
+        fires = []
+
+    if fires:
+        for f in fires:
+            gx = int((f["lon"] - (lon - 0.5)) / 1.0 * 64)
+            gy = int((lat + 0.5 - f["lat"]) / 1.0 * 64)
+            gx = max(0, min(63, gx))
+            gy = max(0, min(63, gy))
+            simulation.grid.ignite(gx, gy)
+    else:
+        simulation.grid.ignite(32, 32)
+
+    simulation.running = True
+    steps = []
+    for _ in range(ticks):
+        result = await simulation.tick()
+        steps.append({
+            "step": result["step"],
+            "burning": result["stats"]["burning"],
+            "burned": result["stats"]["burned"],
+            "percentage_burned": result["stats"]["percentage_burned"],
+            "active_fronts": result["stats"]["active_fronts"],
+        })
+    simulation.running = False
+
+    return {
+        "location": {"lat": lat, "lon": lon},
+        "firms_ignited": len(fires),
+        "ticks": ticks,
+        "final_state": simulation._build_response(),
+        "steps": steps,
+    }
 
 
 @router.get("/alerts")
