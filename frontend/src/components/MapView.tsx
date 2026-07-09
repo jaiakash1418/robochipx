@@ -422,14 +422,31 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
         iconAnchor: [(size + 6) / 2, (size + 6) / 2],
       });
       const marker = L.marker([fire.latitude, fire.longitude], { icon });
-      const label = `${fire.title}${fire.magnitude ? ` — ${fire.magnitude} ${fire.magnitude_unit}` : ''}`;
+      const hasMag = fire.magnitude != null;
+      const label = `${fire.title}${hasMag ? ` — ${fire.magnitude} ${fire.magnitude_unit}` : ''}`;
       marker.bindTooltip(label, { direction: 'top' });
-      marker.bindPopup(
-        `<strong>${fire.title}</strong><br/>` +
-        (fire.description ? `${fire.description}<br/>` : '') +
-        (fire.magnitude ? `Size: ${fire.magnitude} ${fire.magnitude_unit}<br/>` : '') +
-        `Updated: ${new Date(fire.date).toLocaleString()}`,
-      );
+
+      const popup = document.createElement('div');
+      const title = document.createElement('strong');
+      title.textContent = fire.title;
+      popup.appendChild(title);
+      popup.appendChild(document.createElement('br'));
+
+      if (fire.description) {
+        popup.appendChild(document.createTextNode(fire.description));
+        popup.appendChild(document.createElement('br'));
+      }
+
+      if (hasMag) {
+        popup.appendChild(document.createTextNode(`Size: ${fire.magnitude} ${fire.magnitude_unit}`));
+        popup.appendChild(document.createElement('br'));
+      }
+
+      if (fire.date) {
+        popup.appendChild(document.createTextNode(`Updated: ${new Date(fire.date).toLocaleString()}`));
+      }
+
+      marker.bindPopup(popup);
       layer.addLayer(marker);
     }
 
