@@ -163,3 +163,30 @@ export interface FiresResponse {
   fires: LiveFire[];
   count: number;
 }
+
+export interface FirmsFire {
+  lat: number;
+  lon: number;
+  brightness: number;
+  confidence: string;
+  acq_date: string;
+  acq_time: string;
+  satellite: string;
+  daynight: string;
+}
+
+export interface GlobalFiresResponse {
+  fires: FirmsFire[];
+  source: string;
+  api_key_configured: boolean;
+  error?: string;
+}
+
+export interface BBoxRequest {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+  source?: string;
+  day_range?: number;
+}

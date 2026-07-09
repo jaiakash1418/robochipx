@@ -14,6 +14,9 @@ import type {
   GridRect,
   DemoRunResponse,
   FiresResponse,
+  GlobalFiresResponse,
+  BBoxRequest,
+  FirmsFire,
 } from './types';
 
 let useMock: boolean | null = null;
@@ -107,6 +110,42 @@ export const getLiveFires = async () => {
   if (await isUsingMock()) return { fires: [], count: 0 } as unknown as FiresResponse;
   return apiClient.get<FiresResponse>('/fires/live').then((r) => r.data);
 };
+
+export const getGlobalFires = async (bbox: BBoxRequest) => {
+  if (await isUsingMock()) {
+    return {
+      fires: MOCK_GLOBAL_FIRES.filter(f =>
+        f.lat >= bbox.south && f.lat <= bbox.north &&
+        f.lon >= bbox.west && f.lon <= bbox.east
+      ),
+      source: 'NASA FIRMS (mock)',
+      api_key_configured: true,
+    } as GlobalFiresResponse;
+  }
+  const params = {
+    west: bbox.west,
+    south: bbox.south,
+    east: bbox.east,
+    north: bbox.north,
+    source: bbox.source ?? 'viirs_snpp',
+    day_range: bbox.day_range ?? 1,
+  };
+  return apiClient.get<GlobalFiresResponse>('/fires/global', { params }).then((r) => r.data);
+};
+
+// Mock global fires for offline testing - real-world major wildfire locations
+const MOCK_GLOBAL_FIRES: FirmsFire[] = [
+  { lat: 37.8, lon: -121.5, brightness: 350, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // California
+  { lat: 34.1, lon: -117.8, brightness: 380, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // LA area
+  { lat: 45.5, lon: -122.0, brightness: 320, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Oregon
+  { lat: -33.9, lon: 151.2, brightness: 340, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Australia (Sydney area)
+  { lat: -23.5, lon: -46.6, brightness: 310, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Brazil (Amazon)
+  { lat: 55.7, lon: 37.6, brightness: 300, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Russia (Moscow)
+  { lat: 48.9, lon: 2.3, brightness: 290, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // France (Paris)
+  { lat: -6.2, lon: 106.8, brightness: 330, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Indonesia
+  { lat: 5.6, lon: -74.1, brightness: 340, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Colombia
+  { lat: 31.2, lon: 121.5, brightness: 320, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // China (Shanghai)
+] as const;
 
 export const clearBatch = async (cells: { x: number; y: number }[]) => {
   if (await isUsingMock()) {

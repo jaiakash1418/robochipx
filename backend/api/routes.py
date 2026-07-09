@@ -146,6 +146,16 @@ async def get_active_fires(lat: float = None, lon: float = None, radius: float =
         return {"fires": [], "source": "NASA FIRMS", "api_key_configured": firms_service.is_available(), "error": str(e)}
 
 
+@router.get("/fires/global")
+async def get_global_fires(west: float, south: float, east: float, north: float, source: str = "viirs_snpp", day_range: int = 1):
+    """Fetch FIRMS fires for an arbitrary bounding box (west, south, east, north)."""
+    try:
+        fires = await firms_service.fetch_fires_bbox(west, south, east, north, source, day_range)
+        return {"fires": fires, "source": "NASA FIRMS", "api_key_configured": firms_service.is_available()}
+    except Exception as e:
+        return {"fires": [], "source": "NASA FIRMS", "api_key_configured": firms_service.is_available(), "error": str(e)}
+
+
 @router.post("/demo/run")
 async def demo_run(ticks: int = 10, lat: float = None, lon: float = None):
     simulation.reset()

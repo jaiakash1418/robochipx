@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, RotateCcw, MousePointer2, Square, Move, Flame, Crosshair, X } from 'lucide-react';
+import { Play, RotateCcw, MousePointer2, Square, Move, Flame, Crosshair, Globe, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import MapView from '../components/MapView';
 import ControlPanel from '../components/ControlPanel';
@@ -11,8 +11,8 @@ import TimeScrubber from '../components/TimeScrubber';
 import ScenarioPanel from '../components/ScenarioPanel';
 import InfoTooltip from '../components/InfoTooltip';
 import { useSimulation } from '../context/SimulationContext';
-import type { LiveFire } from '../api/types';
-import { getLiveFires } from '../api/endpoints';
+import type { LiveFire, FirmsFire, BBoxRequest } from '../api/types';
+import { getLiveFires, getGlobalFires } from '../api/endpoints';
 import LiveFiresPanel from '../components/LiveFiresPanel';
 
 const TICK_INTERVAL = 2000;
@@ -32,6 +32,7 @@ export default function DashboardPage() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [igniteMode, setIgniteMode] = useState<'point' | 'area' | 'move'>('point');
   const [gridCenter, setGridCenter] = useState<[number, number]>([38, -121.5]);
+  const [mapMode, setMapMode] = useState<'world' | 'simulation'>('simulation');
 
   const handleGridCenterChange = useCallback((center: [number, number]) => {
     setGridCenter(center);
@@ -41,9 +42,41 @@ export default function DashboardPage() {
   }, [igniteMode, setCustomLocation]);
   const [showLiveFires, setShowLiveFires] = useState(false);
   const [liveFires, setLiveFires] = useState<LiveFire[]>([]);
+  const [globalFires, setGlobalFires] = useState<FirmsFire[]>([]);
   const [flyToFire, setFlyToFire] = useState<[number, number] | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const onFlyDone = useCallback(() => setFlyToFire(null), []);
+  const [worldViewport, setWorldViewport] = useState<BBoxRequest>({ west: -180, south: -90, east: 180, north: 90 });
+  const worldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSelectFireLocation = useCallback(async (lat: number, lon: number) => {
+    setGridCenter([lat, lon]);
+    setMapMode('simulation');
+    setCustomLocation(lat, lon);
+    setFlyToFire([lat, lon]);
+  }, [setCustomLocation]);
+
+  const handleViewportChange = useCallback((bbox: BBoxRequest) => {
+    // Debounce viewport updates to avoid rapid re-fetches
+    if (worldTimerRef.current) clearTimeout(worldTimerRef.current);
+    worldTimerRef.current = setTimeout(() => setWorldViewport(bbox), 300);
+  }, []);
+
+  // Fetch global fires when world viewport changes
+  useEffect(() => {
+    if (mapMode !== 'world') return;
+    const fetch = async () => {
+      try {
+        const data = await getGlobalFires(worldViewport);
+        if (data.fires.length > 0) setGlobalFires(data.fires);
+      } catch {}
+    };
+    fetch();
+    const id = setInterval(() => {
+      fetch();
+    }, 30000);
+    return () => clearInterval(id);
+  }, [mapMode, worldViewport]);
 
   useEffect(() => {
     if (!showLiveFires) { setLiveFires([]); return; }
@@ -96,30 +129,32 @@ export default function DashboardPage() {
       <div className="dashboard-map-area">
         <div className="dashboard-map">
           <div className="map-overlay-controls">
-            <div className="ignite-mode-toggle">
-              <button
-                className={`btn ignite-mode-btn${igniteMode === 'point' ? ' active' : ''}`}
-                onClick={() => setIgniteMode('point')}
-                title="Click to ignite single cell"
-              >
-                <MousePointer2 size={14} /> Point
-              </button>
-              <button
-                className={`btn ignite-mode-btn${igniteMode === 'area' ? ' active' : ''}`}
-                onClick={() => setIgniteMode('area')}
-                title="Drag to ignite area"
-              >
-                <Square size={14} /> Area
-              </button>
-              <button
-                className={`btn ignite-mode-btn${igniteMode === 'move' ? ' active' : ''}`}
-                onClick={() => setIgniteMode('move')}
-                title="Click map to reposition grid"
-              >
-                <Move size={14} /> Move
-              </button>
-            </div>
-            {igniteMode === 'move' && (
+            {mapMode === 'simulation' && (
+              <div className="ignite-mode-toggle">
+                <button
+                  className={`btn ignite-mode-btn${igniteMode === 'point' ? ' active' : ''}`}
+                  onClick={() => setIgniteMode('point')}
+                  title="Click to ignite single cell"
+                >
+                  <MousePointer2 size={14} /> Point
+                </button>
+                <button
+                  className={`btn ignite-mode-btn${igniteMode === 'area' ? ' active' : ''}`}
+                  onClick={() => setIgniteMode('area')}
+                  title="Drag to ignite area"
+                >
+                  <Square size={14} /> Area
+                </button>
+                <button
+                  className={`btn ignite-mode-btn${igniteMode === 'move' ? ' active' : ''}`}
+                  onClick={() => setIgniteMode('move')}
+                  title="Click map to reposition grid"
+                >
+                  <Move size={14} /> Move
+                </button>
+              </div>
+            )}
+            {igniteMode === 'move' && mapMode === 'simulation' && (
               <div className="grid-location-presets">
                 {GRID_LOCATIONS.map((loc) => (
                   <button
@@ -132,22 +167,26 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
-            <button
-              className="btn btn-primary map-control-btn"
-              onClick={() => doTick()}
-              disabled={!running}
-              title="Manual step"
-            >
-              <Play size={14} /> Step
-            </button>
-            <InfoTooltip text={t('tooltips.stepBtn')} />
-            <button
-              className="btn map-control-btn"
-              onClick={doReset}
-              title="Clear map & reset"
-            >
-              <RotateCcw size={14} /> Clear
-            </button>
+            {mapMode === 'simulation' && (
+              <>
+                <button
+                  className="btn btn-primary map-control-btn"
+                  onClick={() => doTick()}
+                  disabled={!running}
+                  title="Manual step"
+                >
+                  <Play size={14} /> Step
+                </button>
+                <InfoTooltip text={t('tooltips.stepBtn')} />
+                <button
+                  className="btn map-control-btn"
+                  onClick={doReset}
+                  title="Clear map & reset"
+                >
+                  <RotateCcw size={14} /> Clear
+                </button>
+              </>
+            )}
             <button
               className={`btn map-control-btn${showLiveFires ? ' active' : ''}`}
               onClick={() => setShowLiveFires((v) => !v)}
@@ -176,25 +215,62 @@ export default function DashboardPage() {
             >
               <Crosshair size={14} /> {userLocation ? 'Located' : 'Locate'}
             </button>
+            <button
+              className={`btn map-control-btn${mapMode === 'world' ? ' active' : ''}`}
+              onClick={() => setMapMode(mapMode === 'world' ? 'simulation' : 'world')}
+              title="Browse world wildfires"
+              style={mapMode === 'world' ? { background: 'var(--accent-fire)', color: 'white' } : undefined}
+            >
+              <Globe size={14} /> {mapMode === 'world' ? 'World' : 'Global'}
+            </button>
             {running && (
               <span className="map-live-badge">
                 <span className="live-dot" /> LIVE
               </span>
             )}
           </div>
-          <MapView igniteMode={igniteMode} gridCenter={gridCenter} onGridCenterChange={handleGridCenterChange} liveFires={liveFires} flyToFire={flyToFire} onFlyDone={onFlyDone} userLocation={userLocation} />
-          <Legend />
+          <MapView
+            mode={mapMode}
+            igniteMode={igniteMode}
+            gridCenter={gridCenter}
+            onGridCenterChange={handleGridCenterChange}
+            liveFires={liveFires}
+            globalFires={globalFires}
+            flyToFire={flyToFire}
+            onFlyDone={onFlyDone}
+            userLocation={userLocation}
+            onSelectFireLocation={handleSelectFireLocation}
+            onViewportChange={handleViewportChange}
+          />
+          {mapMode === 'simulation' && <Legend />}
         </div>
-        {showLiveFires && liveFires.length > 0 && (
+        {mapMode === 'simulation' && showLiveFires && liveFires.length > 0 && (
           <LiveFiresPanel fires={liveFires} onSelectFire={(lat, lng) => setFlyToFire([lat, lng])} />
         )}
-        <TimeScrubber />
+        {mapMode === 'world' && (
+          <div className="world-mode-hint">
+            <p>🌍 Browse the world and click on a fire hotspot (<span style={{fontSize: 18}}>🔥</span>) to run a simulation there</p>
+          </div>
+        )}
+        {mapMode === 'simulation' && <TimeScrubber />}
       </div>
       <aside className="dashboard-sidebar">
-        <ControlPanel />
-        <StatsPanel />
-        <AlertPanel />
-        <ScenarioPanel />
+        {mapMode === 'simulation' ? (
+          <>
+            <ControlPanel />
+            <StatsPanel />
+            <AlertPanel />
+            <ScenarioPanel />
+          </>
+        ) : (
+          <div className="world-sidebar-info">
+            <h3>🌍 World Fire Browser</h3>
+            <p>Pan and zoom the map to explore live wildfire hotspots detected by NASA FIRMS satellites.</p>
+            <p>Click any fire icon (<span style={{fontSize:18}}>🔥</span>) to load a simulation at that location.</p>
+            <hr />
+            <p><small>Data source: NASA FIRMS (VIIRS + MODIS)</small></p>
+          </div>
+        )}
       </aside>
       <LLMChat />
     </div>

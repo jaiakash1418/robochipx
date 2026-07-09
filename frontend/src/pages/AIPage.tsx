@@ -74,13 +74,17 @@ export default function AIPage() {
           <div className="ai-page-map">
             <div className="ai-page-map-inner">
               <MapView
+                mode="simulation"
                 igniteMode="point"
                 gridCenter={gridCenter}
                 onGridCenterChange={setGridCenter}
                 liveFires={liveFires}
+                globalFires={[]}
                 flyToFire={flyToFire}
                 onFlyDone={() => setFlyToFire(null)}
                 userLocation={userLocation}
+                onSelectFireLocation={() => {}}
+                onViewportChange={() => {}}
               />
               <Legend />
             </div>

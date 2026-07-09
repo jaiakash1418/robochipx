@@ -109,6 +109,7 @@ export default function Layout() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
+            style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
           >
             <Outlet />
           </motion.div>
