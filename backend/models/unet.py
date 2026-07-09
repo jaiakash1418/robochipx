@@ -27,11 +27,12 @@ class UNetInference:
                 in_channels=settings.input_channels,
                 classes=1,
             )
-            checkpoint = torch.load(settings.model_path, map_location=self.device)
+            checkpoint = torch.load(settings.model_path, map_location=self.device, weights_only=True)
             self.model.load_state_dict(checkpoint)
             self.model.to(self.device)
             self.model.eval()
-        except (FileNotFoundError, ImportError):
+        except (FileNotFoundError, ImportError, RuntimeError) as e:
+            print(f"UNet load failed: {e}")
             self.model = None
 
     def _load_fire_sense_net(self):
@@ -46,7 +47,8 @@ class UNetInference:
                 self.model.load_state_dict(checkpoint)
             self.model.to(self.device)
             self.model.eval()
-        except (FileNotFoundError, ImportError):
+        except (FileNotFoundError, ImportError, RuntimeError) as e:
+            print(f"FireSenseNet load failed: {e}")
             self.model = None
 
     def predict(self, input_tensor: np.ndarray, fuel_map: np.ndarray | None = None) -> np.ndarray:

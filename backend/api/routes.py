@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from api.schemas import (
     IgniteRequest,
+    IgniteAreaRequest,
     WeatherOverride,
     LLMQueryRequest,
     LLMQueryResponse,
@@ -37,6 +38,18 @@ async def ignite(req: IgniteRequest):
         raise HTTPException(400, "Invalid cell coordinates or cell already burning")
     simulation.running = True
     return {"success": True, "message": f"Ignited at ({req.x}, {req.y})"}
+
+
+@router.post("/simulation/ignite-area")
+async def ignite_area(req: IgniteAreaRequest):
+    ignited = 0
+    for row in range(req.y1, req.y2 + 1):
+        for col in range(req.x1, req.x2 + 1):
+            if simulation.ignite(col, row):
+                ignited += 1
+    if ignited > 0:
+        simulation.running = True
+    return {"success": True, "ignited": ignited}
 
 
 @router.post("/ignite/batch")
@@ -92,8 +105,8 @@ async def get_stats():
 
 @router.post("/location/set")
 async def set_location(lat: Optional[float] = None, lon: Optional[float] = None):
-    simulation.set_custom_location(lat, lon)
-    return {"success": True, "lat": lat, "lon": lon}
+    await simulation.set_custom_location(lat, lon)
+    return {"success": True, "lat": lat, "lon": lon, "state": simulation._build_response()}
 
 
 @router.get("/weather/live")
@@ -138,7 +151,7 @@ async def demo_run(ticks: int = 10, lat: float = None, lon: float = None):
     simulation.reset()
     lat = lat or settings.default_lat
     lon = lon or settings.default_lon
-    simulation.set_custom_location(lat, lon)
+    await simulation.set_custom_location(lat, lon)
 
     # Fetch live weather
     try:

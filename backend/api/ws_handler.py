@@ -72,8 +72,11 @@ async def _route_message(websocket: WebSocket, data: dict):
         success = simulation.ignite(int(data["x"]), int(data["y"]))
         if success:
             simulation.running = True
-        state = simulation._build_response()
-        await manager.broadcast({"type": "state_update", **state})
+            result = await simulation.tick()
+            await manager.broadcast({"type": "tick_result", **result})
+        else:
+            state = simulation._build_response()
+            await manager.broadcast({"type": "state_update", **state})
 
     elif msg_type == "ignite_batch":
         cells = data.get("cells", [])
@@ -81,8 +84,8 @@ async def _route_message(websocket: WebSocket, data: dict):
             simulation.ignite(int(c["x"]), int(c["y"]))
         if cells:
             simulation.running = True
-        state = simulation._build_response()
-        await manager.broadcast({"type": "state_update", **state})
+            result = await simulation.tick()
+            await manager.broadcast({"type": "tick_result", **result})
 
     elif msg_type == "clear_batch":
         cells = data.get("cells", [])
@@ -104,7 +107,9 @@ async def _route_message(websocket: WebSocket, data: dict):
             simulation.set_initial_zone(int(x1), int(y1), int(x2), int(y2))
 
     elif msg_type == "set_location":
-        simulation.set_custom_location(data.get("lat"), data.get("lon"))
+        await simulation.set_custom_location(data.get("lat"), data.get("lon"))
+        state = simulation._build_response()
+        await manager.broadcast({"type": "state_update", **state})
 
     elif msg_type == "weather_override":
         weather_service.override(

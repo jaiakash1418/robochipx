@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     port: int = 8000
 
     grid_size: int = 64
-    cell_size_meters: int = 500
+    cell_size_meters: int = 1739
 
     model_type: str = "fire_sense_net"
     model_path: str = os.path.join(_BACKEND_DIR, "models", "unet_checkpoint.pt")
@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.2"
 
     firms_api_key: str = ""
+
+    open_topography_url: str = "https://portal.opentopography.org/API/globaldem"
+    open_topography_api_key: str = ""
 
     cors_origins: list[str] = [
         "http://localhost:5173",

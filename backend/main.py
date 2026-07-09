@@ -9,7 +9,7 @@ from api.ws_handler import handle_websocket
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from services.simulation import simulation
-    simulation.load_fuel_map(settings.fuel_map_path)
+    await simulation.load_fuel_map(settings.fuel_map_path, settings.default_lat, settings.default_lon)
     yield
 
 

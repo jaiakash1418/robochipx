@@ -123,10 +123,18 @@
   flex: 1;
   position: relative;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  overflow: hidden;
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   min-height: 400px;
+}
+
+.dashboard-map::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  pointer-events: none;
+  z-index: 1001;
 }
 
 .dashboard-sidebar {

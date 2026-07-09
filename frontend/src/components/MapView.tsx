@@ -5,6 +5,8 @@ import { useSimulation } from '../context/SimulationContext';
 import { FUEL_COLORS, type FuelType, type CellState, type LiveFire } from '../api/types';
 import MapWeatherOverlay from './MapWeatherOverlay';
 import InfoTooltip from './InfoTooltip';
+import { convex } from '@turf/turf';
+import type { Feature, Polygon, FeatureCollection } from 'geojson';
 
 const GRID_SIZE = 64;
 const CANVAS_SIZE = 1024;
@@ -42,6 +44,63 @@ function makeLatLngToGrid(bounds: L.LatLngBounds): (latlng: L.LatLng) => [number
   };
 }
 
+/* --- Turf.js geospatial utilities --- */
+
+function burningCellsToGeoJSON(fireMask: CellState[][], bounds: L.LatLngBounds): FeatureCollection<Polygon> {
+  const south = bounds.getSouth();
+  const north = bounds.getNorth();
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+  const cellLat = (north - south) / GRID_SIZE;
+  const cellLng = (east - west) / GRID_SIZE;
+
+  const features: Feature<Polygon>[] = [];
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      if (fireMask[row][col] === 1) { // burning
+        const cellWest = west + col * cellLng;
+        const cellEast = cellWest + cellLng;
+        const cellNorth = north - row * cellLat;
+        const cellSouth = cellNorth - cellLat;
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [cellWest, cellSouth],
+              [cellEast, cellSouth],
+              [cellEast, cellNorth],
+              [cellWest, cellNorth],
+              [cellWest, cellSouth],
+            ]],
+          },
+          properties: { row, col },
+        });
+      }
+    }
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+function getFirePerimeter(fireMask: CellState[][], bounds: L.LatLngBounds): Feature<Polygon> | null {
+  const geojson = burningCellsToGeoJSON(fireMask, bounds);
+  if (geojson.features.length === 0) return null;
+  
+  // Extract centroids of burning cells as points for convex hull
+  const points = geojson.features.map(f => {
+    const coords = f.geometry.coordinates[0];
+    // Get centroid of cell polygon
+    const lng = coords[0][0] + (coords[2][0] - coords[0][0]) / 2;
+    const lat = coords[0][1] + (coords[2][1] - coords[0][1]) / 2;
+    return { type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [lng, lat] }, properties: {} };
+  });
+  
+  if (points.length < 3) return null;
+  
+  const hull = convex({ type: 'FeatureCollection', features: points });
+  return hull;
+}
+
 interface Props {
   igniteMode: 'point' | 'area' | 'move';
   gridCenter: [number, number];
@@ -59,7 +118,7 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const windParticlesRef = useRef<{ x: number; y: number; speed: number; spawnTime: number; lifetime: number }[]>([]);
   const rafRef = useRef<number>(0);
-  const perimeterLayerRef = useRef<L.Polygon | null>(null);
+  const perimeterLayerRef = useRef<L.GeoJSON | null>(null);
   const gridSnapshotRef = useRef<ImageData | null>(null);
   const selectionRectRef = useRef<L.Rectangle | null>(null);
   const gridRectRef = useRef<L.Rectangle | null>(null);
@@ -79,39 +138,7 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
   const weatherRef = useRef(weather);
   weatherRef.current = weather;
   const lastOverlayUpdateRef = useRef(0);
-  const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() => {});
-
-  const getPerimeterPoints = useCallback((): [number, number][] => {
-    const pts: [number, number][] = [];
-    const toLatLng = gridToLatLngRef.current;
-
-    for (let row = 0; row < GRID_SIZE; row++) {
-      for (let col = 0; col < GRID_SIZE; col++) {
-        const cs = fireMask[row]?.[col] as CellState | undefined;
-        if (cs === undefined || cs === 0) continue;
-
-        const neighbors = [
-          [row - 1, col],
-          [row + 1, col],
-          [row, col - 1],
-          [row, col + 1],
-        ];
-
-        for (const [nr, nc] of neighbors) {
-          if (nr < 0 || nr >= GRID_SIZE || nc < 0 || nc >= GRID_SIZE) {
-            pts.push(toLatLng(col, row));
-            break;
-          }
-          const ns = fireMask[nr]?.[nc] as CellState | undefined;
-          if (ns === undefined || ns === 0) {
-            pts.push(toLatLng(col, row));
-            break;
-          }
-        }
-      }
-    }
-    return pts;
-  }, [fireMask]);
+const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() => {});
 
   const updatePerimeter = useCallback(() => {
     const map = mapRef.current;
@@ -122,22 +149,22 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
       perimeterLayerRef.current = null;
     }
 
-    const pts = getPerimeterPoints();
-    if (pts.length < 3) return;
+    // Use Turf.js for fire perimeter
+    const perimeter = getFirePerimeter(fireMask, boundsRef.current);
+    if (!perimeter) return;
 
-    const hull = convexHull(pts);
-    if (hull.length < 3) return;
-
-    const layer = L.polygon(hull, {
-      color: '#ff4500',
-      weight: 2.5,
-      fillColor: 'rgba(255,69,0,0.10)',
-      fillOpacity: 1,
-      dashArray: '6,4',
-      opacity: 0.8,
+    const layer = L.geoJSON(perimeter, {
+      style: {
+        color: '#ff4500',
+        weight: 2.5,
+        fillColor: 'rgba(255,69,0,0.10)',
+        fillOpacity: 1,
+        dashArray: '6,4',
+        opacity: 0.8,
+      },
     }).addTo(map);
     perimeterLayerRef.current = layer;
-  }, [getPerimeterPoints]);
+  }, [fireMask]);
 
   const drawGridCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -354,8 +381,10 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
     const map = L.map(containerRef.current, {
       center: [38, -121.5],
       zoom: 9,
-      zoomControl: true,
+      zoomControl: false,
     });
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -698,32 +727,4 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${alpha})`;
-}
-
-function cross(o: [number, number], a: [number, number], b: [number, number]): number {
-  return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-}
-
-function convexHull(points: [number, number][]): [number, number][] {
-  if (points.length < 3) return points;
-
-  const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  const lower: [number, number][] = [];
-  for (const p of sorted) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0)
-      lower.pop();
-    lower.push(p);
-  }
-
-  const upper: [number, number][] = [];
-  for (let i = sorted.length - 1; i >= 0; i--) {
-    const p = sorted[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0)
-      upper.pop();
-    upper.push(p);
-  }
-
-  lower.pop();
-  upper.pop();
-  return [...lower, ...upper];
 }

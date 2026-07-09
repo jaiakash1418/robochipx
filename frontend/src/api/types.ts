@@ -92,6 +92,13 @@ export interface GridRect {
   y2: number;
 }
 
+export interface GridBounds {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}
+
 export interface FlyTarget {
   lat: number;
   lon: number;

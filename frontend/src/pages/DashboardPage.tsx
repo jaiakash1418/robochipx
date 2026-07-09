@@ -27,11 +27,18 @@ const GRID_LOCATIONS = [
 
 export default function DashboardPage() {
   const { t } = useTranslation();
-  const { state, doTick, doReset, doFetchWeather, dismissError } = useSimulation();
+  const { state, doTick, doReset, doFetchWeather, dismissError, setCustomLocation } = useSimulation();
   const { running, loading, error } = state;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [igniteMode, setIgniteMode] = useState<'point' | 'area' | 'move'>('point');
   const [gridCenter, setGridCenter] = useState<[number, number]>([38, -121.5]);
+
+  const handleGridCenterChange = useCallback((center: [number, number]) => {
+    setGridCenter(center);
+    if (igniteMode === 'move') {
+      setCustomLocation(center[0], center[1]);
+    }
+  }, [igniteMode, setCustomLocation]);
   const [showLiveFires, setShowLiveFires] = useState(false);
   const [liveFires, setLiveFires] = useState<LiveFire[]>([]);
   const [flyToFire, setFlyToFire] = useState<[number, number] | null>(null);
@@ -118,7 +125,7 @@ export default function DashboardPage() {
                   <button
                     key={loc.label}
                     className={`btn btn-sm${gridCenter[0] === loc.center[0] && gridCenter[1] === loc.center[1] ? ' active' : ''}`}
-                    onClick={() => setGridCenter(loc.center as [number, number])}
+                    onClick={() => handleGridCenterChange(loc.center as [number, number])}
                   >
                     {loc.label}
                   </button>
@@ -175,7 +182,7 @@ export default function DashboardPage() {
               </span>
             )}
           </div>
-          <MapView igniteMode={igniteMode} gridCenter={gridCenter} onGridCenterChange={setGridCenter} liveFires={liveFires} flyToFire={flyToFire} onFlyDone={onFlyDone} userLocation={userLocation} />
+          <MapView igniteMode={igniteMode} gridCenter={gridCenter} onGridCenterChange={handleGridCenterChange} liveFires={liveFires} flyToFire={flyToFire} onFlyDone={onFlyDone} userLocation={userLocation} />
           <Legend />
         </div>
         {showLiveFires && liveFires.length > 0 && (

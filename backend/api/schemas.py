@@ -7,6 +7,13 @@ class IgniteRequest(BaseModel):
     y: int
 
 
+class IgniteAreaRequest(BaseModel):
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+
+
 class StatsResponse(BaseModel):
     total_cells: int
     burning: int

@@ -2,7 +2,20 @@ import os
 import httpx
 import csv
 import datetime
+import logging
 from config import settings
+
+logger = logging.getLogger(__name__)
+
+# Shared HTTP client for connection pooling
+_weather_client: httpx.AsyncClient | None = None
+
+
+def _get_weather_client() -> httpx.AsyncClient:
+    global _weather_client
+    if _weather_client is None or _weather_client.is_closed:
+        _weather_client = httpx.AsyncClient(timeout=10.0)
+    return _weather_client
 
 
 class WeatherService:
@@ -21,12 +34,12 @@ class WeatherService:
             "daily": "temperature_2m_min,precipitation_sum",
         }
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(settings.open_meteo_url, params=params, timeout=10)
-            resp.raise_for_status()
-            json_data = resp.json()
-            current = json_data["current"]
-            daily = json_data.get("daily", {})
+        client = _get_weather_client()
+        resp = await client.get(settings.open_meteo_url, params=params)
+        resp.raise_for_status()
+        json_data = resp.json()
+        current = json_data["current"]
+        daily = json_data.get("daily", {})
 
         weather = {
             "wind_speed": current["wind_speed_10m"],
@@ -63,7 +76,8 @@ class WeatherService:
         if self.use_live:
             try:
                 return await self.fetch_live(lat, lon)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Live weather fetch failed, using demo: {e}")
                 return self.get_demo()
         return self.cached if self.cached else self.get_demo()
 

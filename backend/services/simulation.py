@@ -16,9 +16,13 @@ class SimulationService:
         self.custom_lon: float | None = None
         self.initial_zone: tuple[int, int, int, int] | None = None
 
-    def set_custom_location(self, lat: float | None, lon: float | None):
+    async def set_custom_location(self, lat: float | None, lon: float | None):
         self.custom_lat = lat
         self.custom_lon = lon
+        if lat is not None and lon is not None:
+            await self.grid.generate_terrain(lat, lon)
+            self.running = False
+            self.initial_zone = None
 
     def set_initial_zone(self, x1: int, y1: int, x2: int, y2: int):
         self.initial_zone = (x1, y1, x2, y2)
@@ -26,8 +30,8 @@ class SimulationService:
     def clear_initial_zone(self):
         self.initial_zone = None
 
-    def load_fuel_map(self, path: str):
-        self.grid.load_fuel_map(path)
+    async def load_fuel_map(self, path: str, lat: float | None = None, lon: float | None = None):
+        await self.grid.load_fuel_map(path, lat, lon)
 
     async def tick(self) -> dict:
         if not self.running:
@@ -101,7 +105,8 @@ class SimulationService:
         if burning.any() and not new_fire.any():
             candidates = neighbors & ~water & (self.grid.fire_mask == 0)
             if candidates.any():
-                best = np.unravel_index(np.argmax(prob_map * candidates), prob_map.shape)
+                masked = np.where(candidates, prob_map, -np.inf)
+                best = np.unravel_index(np.argmax(masked), prob_map.shape)
                 new_fire[best] = True
 
         self.grid.fire_mask[burning] = 2

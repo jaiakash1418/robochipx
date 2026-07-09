@@ -3,6 +3,15 @@ import io
 import httpx
 from config import settings
 
+_firms_client: httpx.AsyncClient | None = None
+
+
+def _get_firms_client() -> httpx.AsyncClient:
+    global _firms_client
+    if _firms_client is None or _firms_client.is_closed:
+        _firms_client = httpx.AsyncClient(timeout=30.0)
+    return _firms_client
+
 
 FIRMS_SOURCES = {
     "viirs_snpp": "VIIRS_SNPP_NRT",
@@ -31,14 +40,19 @@ class FirmsService:
             return []
 
         source_code = FIRMS_SOURCES.get(source, FIRMS_SOURCES["viirs_snpp"])
+        # FIRMS API expects area as west,south,east,north (bounding box)
+        west = lon - radius_deg
+        south = lat - radius_deg
+        east = lon + radius_deg
+        north = lat + radius_deg
         url = (
             f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{self.api_key}"
-            f"/{source_code}/{day_range}/{lat},{lon},{radius_deg}"
+            f"/{source_code}/{day_range}/{west},{south},{east},{north}"
         )
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
+        client = _get_firms_client()
+        resp = await client.get(url)
+        resp.raise_for_status()
 
         fires = []
         reader = csv.DictReader(io.StringIO(resp.text))
