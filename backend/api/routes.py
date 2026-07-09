@@ -2,7 +2,6 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from api.schemas import (
     IgniteRequest,
-    StateResponse,
     WeatherOverride,
     LLMQueryRequest,
     LLMQueryResponse,
@@ -91,6 +90,30 @@ async def get_alerts():
         simulation.grid.size,
     )
     return {"alerts": alerts}
+
+
+@router.get("/model/evaluation")
+async def get_evaluation():
+    import json
+    from pathlib import Path
+    result_path = Path("models/evaluation_results/latest_eval.json")
+    if result_path.exists():
+        return json.loads(result_path.read_text())
+    return {"message": "No evaluation results yet. Run POST /api/model/evaluate first."}
+
+
+@router.post("/model/evaluate")
+async def model_evaluate():
+    try:
+        from evaluate import evaluate as run_eval
+        result = run_eval()
+        if "error" in result:
+            raise HTTPException(500, result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Evaluation failed: {str(e)}")
 
 
 @router.post("/llm/query", response_model=LLMQueryResponse)

@@ -183,6 +183,10 @@ export class MockSimulationEngine {
     return alerts;
   }
 
+  getState(): TickResponse {
+    return this._buildResponse();
+  }
+
   private _buildResponse(): TickResponse {
     return {
       step: this.step, running: this.running,

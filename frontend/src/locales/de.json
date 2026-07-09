@@ -43,6 +43,28 @@
     "thinking": "Denke nach",
     "error": "Entschuldigung, Ihre Anfrage konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut."
   },
+  "tooltips": {
+    "dataSource": "Demo verwendet statische Wetterdaten (Wind=12km/h, 135°, 29°C, 34% Feuchte). Live holt Echtzeitdaten von der Open-Meteo-API für Ihren Standort.",
+    "windSpeed": "Windgeschwindigkeit in km/h. Höhere Werte beschleunigen die Brandausbreitung in Windrichtung und erhöhen die Funkenflug-Distanz.",
+    "windDir": "Richtung, AUS der der Wind kommt (0°=Norden, 90°=Osten, 180°=Süden, 270°=Westen). Feuer breitet sich mit dem Wind am schnellsten aus.",
+    "humidity": "Relative Luftfeuchtigkeit in Prozent. Niedrige Feuchtigkeit trocknet Pflanzen aus und erhöht die Brennbarkeit.",
+    "temp": "Temperatur in Grad Celsius. Höhere Temperaturen erwärmen den Brennstoff vor der Feuerfront und beschleunigen die Ausbreitung.",
+    "apply": "Überschreibt die Wetterparameter für die Simulation manuell. Deaktiviert Live-Updates und verwendet Ihre Werte.",
+    "tick": "Simulation um einen Schritt vorantreiben. Die Brandausbreitung basiert auf Brennstofftyp, Wetter und aktueller Feuerfront.",
+    "reset": "Löscht alle aktiven Feuer und setzt die Feuermaske zurück. Die Brennstoffkarte bleibt erhalten.",
+    "stepBtn": "Simulation manuell um einen Schritt vorantreiben. Nützlich für schrittweise Analyse.",
+    "clearBtn": "Simulation zurücksetzen: löscht alle Feuer und die Feuermaske. Die Brennstoffkarte bleibt unverändert.",
+    "burning": "Anzahl der Zellen, die derzeit brennen. Diese Zellen können Feuer auf benachbarte Zellen übertragen.",
+    "burned": "Anzahl der vollständig verbrannten Zellen. Verbrannte Zellen können nicht mehr entzündet werden.",
+    "burnedPct": "Prozentsatz des gesamten 64x64-Rasters (4096 Zellen), der verbrannt ist.",
+    "activeFronts": "Anzahl der aktiven Feuerfront-Segmente, die sich aktiv ausbreiten.",
+    "legend": "Farbcodierte Legende für das Simulationsraster. Wald-, Gras-, Wasser-, Stadt-, Straßen- und Brandschneisen-Typen.",
+    "grid": "64x64 Simulationsraster auf einer realen Weltkarte. Klicken Sie auf eine Zelle, um ein Feuer zu entzünden.",
+    "gridSize": "Das Simulationsraster ist fest auf 64x64 Zellen eingestellt. Jede Zelle repräsentiert ca. 1km² in der San Francisco Bay Area.",
+    "scenario": "Speichern und Laden von Simulationsszenarien. Speichert Brennstoffkarte, Feuerzustand und Wetter für spätere Wiedergabe.",
+    "timeline": "Ziehen Sie den Schieber oder verwenden Sie Pfeiltasten, um die Simulation Schritt für Schritt abzuspielen.",
+    "chat": "Fragen Sie den KI-Assistenten zu Waldbrandverhalten, Wettereffekten, Ausbreitungsmechanik oder Steuerung."
+  },
   "legend": {
     "title": "Legende",
     "forest": "Wald",

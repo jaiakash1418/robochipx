@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Play, RotateCcw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import MapView from '../components/MapView';
 import ControlPanel from '../components/ControlPanel';
 import StatsPanel from '../components/StatsPanel';
@@ -8,11 +9,13 @@ import LLMChat from '../components/LLMChat';
 import Legend from '../components/Legend';
 import TimeScrubber from '../components/TimeScrubber';
 import ScenarioPanel from '../components/ScenarioPanel';
+import InfoTooltip from '../components/InfoTooltip';
 import { useSimulation } from '../context/SimulationContext';
 
 const TICK_INTERVAL = 2000;
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const { state, doTick, doReset } = useSimulation();
   const { running, loading, error } = state;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -61,6 +64,7 @@ export default function DashboardPage() {
             >
               <Play size={14} /> Step
             </button>
+            <InfoTooltip text={t('tooltips.stepBtn')} />
             <button
               className="btn map-control-btn"
               onClick={doReset}
@@ -68,6 +72,7 @@ export default function DashboardPage() {
             >
               <RotateCcw size={14} /> Clear
             </button>
+            <InfoTooltip text={t('tooltips.clearBtn')} />
             {running && (
               <span className="map-live-badge">
                 <span className="live-dot" /> LIVE

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSimulation } from '../context/SimulationContext';
 import { FUEL_COLORS, type FuelType, type CellState } from '../api/types';
 import MapWeatherOverlay from './MapWeatherOverlay';
+import InfoTooltip from './InfoTooltip';
 
 const GRID_SIZE = 64;
 const CANVAS_SIZE = 1024;
@@ -25,6 +27,7 @@ function gridToLatLng(cellX: number, cellY: number): [number, number] {
 }
 
 export default function MapView() {
+  const { t } = useTranslation();
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<L.ImageOverlay | null>(null);
@@ -307,6 +310,9 @@ export default function MapView() {
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       <MapWeatherOverlay weather={weather} loading={false} />
+      <div style={{ position: 'absolute', bottom: 80, left: 12, zIndex: 1000 }}>
+        <InfoTooltip text={t('tooltips.grid')} />
+      </div>
     </div>
   );
 }

@@ -47,7 +47,7 @@ export const tick = async () => {
 };
 
 export const getState = async () => {
-  if (await isUsingMock()) return mockEngine.tick();
+  if (await isUsingMock()) return mockEngine.getState();
   return apiClient.get<TickResponse>('/simulation/state').then((r) => r.data);
 };
 
@@ -57,7 +57,7 @@ export const resetSimulation = async () => {
 };
 
 export const getStats = async () => {
-  if (await isUsingMock()) return mockEngine.tick().stats;
+  if (await isUsingMock()) return mockEngine.getState().stats;
   return apiClient.get<Stats>('/simulation/stats').then((r) => r.data);
 };
 
@@ -78,7 +78,7 @@ export const overrideWeather = async (data: WeatherOverrideRequest) => {
 
 export const getAlerts = async () => {
   if (await isUsingMock()) {
-    const alerts = mockEngine.tick().alerts;
+    const alerts = mockEngine.getState().alerts;
     return { alerts } as AlertsResponse;
   }
   return apiClient.get<AlertsResponse>('/alerts').then((r) => r.data);
@@ -86,7 +86,7 @@ export const getAlerts = async () => {
 
 export const queryLLM = async (data: LLMQueryRequest) => {
   if (await isUsingMock()) {
-    const state = mockEngine.tick();
+    const state = mockEngine.getState();
     const alerts = state.alerts.map((a) => a.message).join(', ') || 'No active alerts.';
     return { answer: `Current simulation at step ${state.step}: ${state.stats.percentage_burned}% area burned, ${state.stats.active_fronts} active fire fronts. ${alerts} The fire is ${state.running ? 'spreading' : 'paused'}.` } as LLMQueryResponse;
   }

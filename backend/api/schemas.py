@@ -7,20 +7,22 @@ class IgniteRequest(BaseModel):
     y: int
 
 
-class TickResponse(BaseModel):
-    step: int
-    new_burned_cells: list[dict]
-    stats: dict
-    alerts: list[dict]
+class StatsResponse(BaseModel):
+    total_cells: int
+    burning: int
+    burned: int
+    percentage_burned: float
+    active_fronts: int
 
 
-class StateResponse(BaseModel):
+class SimulationState(BaseModel):
     step: int
-    grid: list[list[int]]
     fire_mask: list[list[int]]
-    stats: dict
-    weather: dict
+    fuel_map: list[list[int]]
+    towns: list[dict]
+    stats: StatsResponse
     alerts: list[dict]
+    running: bool
 
 
 class WeatherOverride(BaseModel):

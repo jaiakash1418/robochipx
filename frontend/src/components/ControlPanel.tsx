@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSimulation } from '../context/SimulationContext';
+import InfoTooltip from './InfoTooltip';
 
 export default function ControlPanel() {
   const { t } = useTranslation();
@@ -46,7 +47,10 @@ export default function ControlPanel() {
       <h3>{t('controls.title')}</h3>
 
       <div className="control-group">
-        <label>{t('controls.dataSource')}</label>
+        <label>
+          {t('controls.dataSource')}
+          <InfoTooltip text={t('tooltips.dataSource')} />
+        </label>
         <button
           onClick={handleToggleLive}
           className={`btn ${useLiveData ? 'btn-primary' : ''}`}
@@ -58,7 +62,10 @@ export default function ControlPanel() {
 
       <div className="control-group">
         <label>
-          <span>{t('controls.windSpeed')}</span>
+          <span>
+            {t('controls.windSpeed')}
+            <InfoTooltip text={t('tooltips.windSpeed')} />
+          </span>
           <span>{windSpeed} km/h</span>
         </label>
         <input
@@ -72,7 +79,10 @@ export default function ControlPanel() {
 
       <div className="control-group">
         <label>
-          <span>{t('controls.windDir')}</span>
+          <span>
+            {t('controls.windDir')}
+            <InfoTooltip text={t('tooltips.windDir')} />
+          </span>
           <span>{windDir}°</span>
         </label>
         <div className="compass" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -101,7 +111,10 @@ export default function ControlPanel() {
 
       <div className="control-group">
         <label>
-          <span>{t('controls.humidity')}</span>
+          <span>
+            {t('controls.humidity')}
+            <InfoTooltip text={t('tooltips.humidity')} />
+          </span>
           <span>{humidity}%</span>
         </label>
         <input
@@ -115,7 +128,10 @@ export default function ControlPanel() {
 
       <div className="control-group">
         <label>
-          <span>{t('controls.temp')}</span>
+          <span>
+            {t('controls.temp')}
+            <InfoTooltip text={t('tooltips.temp')} />
+          </span>
           <span>{temp}°C</span>
         </label>
         <input
@@ -131,15 +147,18 @@ export default function ControlPanel() {
         <button className="btn" onClick={handleOverride} disabled={!running}>
           {t('controls.apply')}
         </button>
+        <InfoTooltip text={t('tooltips.apply')} />
         <button className="btn btn-primary" onClick={() => doTick()} disabled={!running}>
           {t('controls.tick')}
         </button>
+        <InfoTooltip text={t('tooltips.tick')} />
       </div>
 
       <div className="button-row">
         <button className="btn btn-danger" onClick={doReset}>
           {t('controls.reset')}
         </button>
+        <InfoTooltip text={t('tooltips.reset')} />
       </div>
 
       {weather && (

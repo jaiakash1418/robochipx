@@ -1,4 +1,4 @@
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   BarChart3,
@@ -6,7 +6,10 @@ import {
   Bell,
   Bot,
   Settings,
+  Activity,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import * as api from '../api/endpoints';
 import ThemeToggle from './ThemeToggle';
 import LanguageSwitcher from './LanguageSwitcher';
 import { ToastProvider } from '../toast/ToastContext';
@@ -18,6 +21,7 @@ const links = [
   { to: '/weather', label: 'Weather', icon: CloudSun },
   { to: '/alerts', label: 'Alerts', icon: Bell },
   { to: '/assistant', label: 'AI', icon: Bot },
+  { to: '/health', label: 'Health', icon: Activity },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -45,6 +49,37 @@ function TopNav() {
   );
 }
 
+function BackendStatus() {
+  const [online, setOnline] = useState<boolean | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        await api.healthCheck();
+        if (mounted) setOnline(true);
+      } catch {
+        if (mounted) setOnline(false);
+      }
+    };
+    check();
+    const interval = setInterval(check, 15000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, []);
+
+  return (
+    <button
+      className="backend-status-btn"
+      onClick={() => navigate('/health')}
+      title={online === true ? 'Backend connected' : online === false ? 'Backend offline' : 'Checking...'}
+    >
+      <span className={`backend-status-dot ${online === true ? 'online' : online === false ? 'offline' : ''}`} />
+      <span className="backend-status-label">{online === true ? 'Live' : online === false ? 'Offline' : '...'}</span>
+    </button>
+  );
+}
+
 export default function Layout() {
   return (
     <ToastProvider>
@@ -58,6 +93,7 @@ export default function Layout() {
             <TopNav />
           </div>
           <div className="topbar-right">
+            <BackendStatus />
             <ThemeToggle />
             <LanguageSwitcher />
           </div>
