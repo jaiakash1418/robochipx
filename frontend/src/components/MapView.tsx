@@ -37,7 +37,9 @@ function makeLatLngToGrid(bounds: L.LatLngBounds): (latlng: L.LatLng) => [number
   return (latlng) => {
     const latPct = (latlng.lat - south) / (north - south);
     const lngPct = (latlng.lng - west) / (east - west);
-    return [Math.floor(lngPct * GRID_SIZE), Math.floor((1 - latPct) * GRID_SIZE)];
+    const x = Math.min(GRID_SIZE - 1, Math.max(0, Math.floor(lngPct * GRID_SIZE)));
+    const y = Math.min(GRID_SIZE - 1, Math.max(0, Math.floor((1 - latPct) * GRID_SIZE)));
+    return [x, y];
   };
 }
 
