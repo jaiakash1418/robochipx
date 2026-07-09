@@ -38,6 +38,7 @@ interface SimulationState {
 type Action =
   | { type: 'SET_LOADING' }
   | { type: 'SET_ERROR'; payload: string }
+  | { type: 'CLEAR_ERROR' }
   | { type: 'UPDATE_SIMULATION'; payload: TickResponse }
   | { type: 'PUSH_HISTORY'; payload: TickResponse }
   | { type: 'SCRUB_TO'; payload: number }
@@ -65,6 +66,8 @@ function reducer(state: SimulationState, action: Action): SimulationState {
       return { ...state, loading: true, error: null };
     case 'SET_ERROR':
       return { ...state, loading: false, error: action.payload };
+    case 'CLEAR_ERROR':
+      return { ...state, error: null };
     case 'UPDATE_SIMULATION':
       return {
         ...state,
@@ -111,10 +114,12 @@ interface SimulationContextValue {
   state: SimulationState;
   doTick: () => Promise<void>;
   doIgnite: (x: number, y: number) => Promise<void>;
+  doIgniteArea: (x1: number, y1: number, x2: number, y2: number) => Promise<void>;
   doReset: () => Promise<void>;
-  doFetchWeather: () => Promise<void>;
-  doFetchWeatherLive: () => Promise<void>;
+  doFetchWeather: (lat?: number, lon?: number) => Promise<void>;
+  doFetchWeatherLive: (lat?: number, lon?: number) => Promise<void>;
   doOverrideWeather: (data: Partial<WeatherResponse>) => Promise<void>;
+  dismissError: () => void;
   doScrubTo: (index: number) => void;
   saveScenario: (name: string) => void;
   loadScenario: (name: string) => boolean;
@@ -160,6 +165,18 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const doIgniteArea = useCallback(async (x1: number, y1: number, x2: number, y2: number) => {
+    dispatch({ type: 'SET_LOADING' });
+    try {
+      await api.igniteArea({ x1, y1, x2, y2 });
+      const data = await api.tick();
+      dispatch({ type: 'UPDATE_SIMULATION', payload: data });
+      dispatch({ type: 'PUSH_HISTORY', payload: data });
+    } catch (err: any) {
+      dispatch({ type: 'SET_ERROR', payload: err.message });
+    }
+  }, []);
+
   const doReset = useCallback(async () => {
     try {
       await api.resetSimulation();
@@ -169,18 +186,18 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const doFetchWeather = useCallback(async () => {
+  const doFetchWeather = useCallback(async (lat?: number, lon?: number) => {
     try {
-      const w = await api.getWeather();
+      const w = await api.getWeather(lat, lon);
       dispatch({ type: 'SET_WEATHER', payload: w });
     } catch (err: any) {
       dispatch({ type: 'SET_ERROR', payload: err.message });
     }
   }, []);
 
-  const doFetchWeatherLive = useCallback(async () => {
+  const doFetchWeatherLive = useCallback(async (lat?: number, lon?: number) => {
     try {
-      const w = await api.getWeatherLive();
+      const w = await api.getWeatherLive(lat, lon);
       dispatch({ type: 'SET_WEATHER', payload: w });
     } catch (err: any) {
       dispatch({ type: 'SET_ERROR', payload: err.message });
@@ -194,6 +211,10 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     } catch (err: any) {
       dispatch({ type: 'SET_ERROR', payload: err.message });
     }
+  }, []);
+
+  const dismissError = useCallback(() => {
+    dispatch({ type: 'CLEAR_ERROR' });
   }, []);
 
   const doScrubTo = useCallback((index: number) => {
@@ -254,7 +275,9 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         state,
         doTick,
         doIgnite,
+        doIgniteArea,
         doReset,
+        dismissError,
         doFetchWeather,
         doFetchWeatherLive,
         doOverrideWeather,

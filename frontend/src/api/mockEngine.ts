@@ -61,9 +61,28 @@ export class MockSimulationEngine {
   ignite(x: number, y: number) {
     if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) return false;
     if (this.fireMask[y][x] !== UNBURNED) return false;
+    if (this.fuelMap[y][x] === 2) return false;
     this.fireMask[y][x] = BURNING;
     this.running = true;
     return true;
+  }
+
+  igniteArea(x1: number, y1: number, x2: number, y2: number) {
+    const minX = Math.max(0, Math.min(x1, x2));
+    const maxX = Math.min(GRID_SIZE - 1, Math.max(x1, x2));
+    const minY = Math.max(0, Math.min(y1, y2));
+    const maxY = Math.min(GRID_SIZE - 1, Math.max(y1, y2));
+    let count = 0;
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        if (this.fireMask[y][x] === UNBURNED && this.fuelMap[y][x] !== 2) {
+          this.fireMask[y][x] = BURNING;
+          count++;
+        }
+      }
+    }
+    if (count > 0) this.running = true;
+    return count;
   }
 
   reset() {
@@ -99,7 +118,11 @@ export class MockSimulationEngine {
     const spread: boolean[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(false));
     for (const [by, bx] of burning) {
       for (const [ny, nx] of [[by - 1, bx], [by + 1, bx], [by, bx - 1], [by, bx + 1]]) {
-        if (ny >= 0 && ny < GRID_SIZE && nx >= 0 && nx < GRID_SIZE && this.fireMask[ny][nx] === UNBURNED)
+        if (
+          ny >= 0 && ny < GRID_SIZE && nx >= 0 && nx < GRID_SIZE &&
+          this.fireMask[ny][nx] === UNBURNED &&
+          this.fuelMap[ny][nx] !== 2
+        )
           spread[ny][nx] = true;
       }
     }
@@ -140,7 +163,8 @@ export class MockSimulationEngine {
     for (let y = 0; y < GRID_SIZE; y++)
       for (let x = 0; x < GRID_SIZE; x++) {
         if (this.fireMask[y][x] === BURNING) this.fireMask[y][x] = BURNED;
-        if (prob[y][x] >= THRESHOLD && this.fireMask[y][x] === UNBURNED) this.fireMask[y][x] = BURNING;
+        if (prob[y][x] >= THRESHOLD && this.fireMask[y][x] === UNBURNED && this.fuelMap[y][x] !== 2)
+          this.fireMask[y][x] = BURNING;
       }
   }
 

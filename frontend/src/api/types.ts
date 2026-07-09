@@ -10,6 +10,13 @@ export interface IgniteRequest {
   y: number;
 }
 
+export interface IgniteAreaRequest {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
 export interface TickResponse {
   step: number;
   fire_mask: number[][];
@@ -91,3 +98,27 @@ export const CELL_STATE_COLORS: Record<CellState, string> = {
   1: '#ff6b35',
   2: '#1a1a1a',
 };
+
+export interface LiveFireSource {
+  id: string;
+  url: string;
+}
+
+export interface LiveFire {
+  id: string;
+  title: string;
+  description: string | null;
+  closed: string | null;
+  latitude: number;
+  longitude: number;
+  magnitude: number | null;
+  magnitude_unit: string;
+  date: string;
+  first_detected: string;
+  sources: LiveFireSource[];
+}
+
+export interface FiresResponse {
+  fires: LiveFire[];
+  count: number;
+}

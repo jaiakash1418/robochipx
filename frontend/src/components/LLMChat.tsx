@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { queryLLM } from '../api/endpoints';
 import { Bot, Send, X, MessageSquare } from 'lucide-react';
@@ -40,16 +41,29 @@ export default function LLMChat() {
   };
 
   return (
-    <>
-      {!open && (
-        <button className="btn btn-primary chat-fab" onClick={() => setOpen(true)}>
+    <AnimatePresence mode="wait">
+      {!open ? (
+        <motion.button
+          key="fab"
+          className="btn btn-primary chat-fab"
+          onClick={() => setOpen(true)}
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0, opacity: 0 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+        >
           <MessageSquare size={18} />
           <Bot size={18} />
-        </button>
-      )}
-
-      {open && (
-        <div className="chat-drawer">
+        </motion.button>
+      ) : (
+        <motion.div
+          key="drawer"
+          className="chat-drawer"
+          initial={{ y: '100%', opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '100%', opacity: 0 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        >
           <div className="chat-drawer-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Bot size={18} />
@@ -93,8 +107,8 @@ export default function LLMChat() {
               <Send size={16} />
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
-    </>
+    </AnimatePresence>
   );
 }

@@ -1,3 +1,4 @@
+import os
 import httpx
 import csv
 import datetime
@@ -64,6 +65,7 @@ class WeatherService:
         return base
 
     def _log(self, weather: dict):
+        os.makedirs(os.path.dirname(settings.log_file), exist_ok=True)
         with open(settings.log_file, "a", newline="") as f:
             writer = csv.writer(f)
             if f.tell() == 0:

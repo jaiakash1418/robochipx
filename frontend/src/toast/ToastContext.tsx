@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface Toast {
   id: number;
@@ -35,18 +36,25 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
       {children}
       <div className="toast-container">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={`toast toast-${t.severity}`}
-            onClick={() => removeToast(t.id)}
-          >
-            <span className="toast-icon">
-              {t.severity === 'danger' ? '⚠️' : t.severity === 'warning' ? '⚡' : 'ℹ️'}
-            </span>
-            <span className="toast-message">{t.message}</span>
-          </div>
-        ))}
+        <AnimatePresence>
+          {toasts.map((t) => (
+            <motion.div
+              key={t.id}
+              className={`toast toast-${t.severity}`}
+              onClick={() => removeToast(t.id)}
+              initial={{ x: '120%', opacity: 0, scale: 0.8 }}
+              animate={{ x: 0, opacity: 1, scale: 1 }}
+              exit={{ x: '120%', opacity: 0, scale: 0.8 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 260 }}
+              layout
+            >
+              <span className="toast-icon">
+                {t.severity === 'danger' ? '⚠️' : t.severity === 'warning' ? '⚡' : 'ℹ️'}
+              </span>
+              <span className="toast-message">{t.message}</span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </ToastContext.Provider>
   );

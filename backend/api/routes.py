@@ -78,9 +78,59 @@ async def override_weather(params: WeatherOverride):
 
 
 @router.get("/weather")
-async def get_weather():
+async def get_weather(lat: float = None, lon: float = None):
+    if lat is not None and lon is not None:
+        try:
+            weather = await weather_service.fetch_live(lat, lon)
+            return weather
+        except Exception:
+            return weather_service.get_demo()
     weather = await weather_service.get_current()
     return weather
+
+
+@router.get("/fires/live")
+async def get_live_fires():
+    from datetime import datetime, timedelta, timezone
+    eonet_url = "https://eonet.gsfc.nasa.gov/api/v3/events?category=wildfires&status=open"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(eonet_url, timeout=15)
+        data = resp.json()
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    fires = []
+    for ev in data.get("events", []):
+        geo = ev.get("geometry", [])
+        if not geo:
+            continue
+        latest = geo[-1]
+        coords = latest.get("coordinates")
+        if not coords or len(coords) < 2:
+            continue
+        latest_date = latest.get("date")
+        if latest_date:
+            try:
+                dt = datetime.fromisoformat(latest_date.replace("Z", "+00:00"))
+                if dt < cutoff:
+                    continue
+            except ValueError:
+                pass
+        earliest = geo[0]
+        fires.append({
+            "id": ev["id"],
+            "title": ev.get("title", "Unknown"),
+            "description": ev.get("description"),
+            "closed": ev.get("closed"),
+            "latitude": coords[1],
+            "longitude": coords[0],
+            "magnitude": latest.get("magnitudeValue"),
+            "magnitude_unit": latest.get("magnitudeUnit", "acres"),
+            "date": latest_date,
+            "first_detected": earliest.get("date"),
+            "sources": ev.get("sources", []),
+        })
+    fires.sort(key=lambda f: f.get("date") or "", reverse=True)
+    trimmed = fires[:200]
+    return {"fires": trimmed, "count": len(trimmed)}
 
 
 @router.get("/alerts")

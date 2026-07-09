@@ -1,4 +1,5 @@
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   LayoutDashboard,
   BarChart3,
@@ -46,6 +47,8 @@ function TopNav() {
 }
 
 export default function Layout() {
+  const location = useLocation();
+
   return (
     <ToastProvider>
       <div className="app-layout">
@@ -63,7 +66,17 @@ export default function Layout() {
           </div>
         </header>
         <main className="app-content">
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
     </ToastProvider>

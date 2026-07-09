@@ -3,12 +3,14 @@ import { mockEngine } from './mockEngine';
 import type {
   HealthResponse,
   IgniteRequest,
+  IgniteAreaRequest,
   TickResponse,
   WeatherResponse,
   WeatherOverrideRequest,
   AlertsResponse,
   LLMQueryRequest,
   LLMQueryResponse,
+  FiresResponse,
   Stats,
 } from './types';
 
@@ -41,6 +43,15 @@ export const ignite = async (data: IgniteRequest) => {
   return apiClient.post<{ success: boolean; message: string }>('/simulation/ignite', data).then((r) => r.data);
 };
 
+export const igniteArea = async (data: IgniteAreaRequest) => {
+  if (await isUsingMock()) {
+    const count = mockEngine.igniteArea(data.x1, data.y1, data.x2, data.y2);
+    if (count === 0) throw new Error('No unburned cells in the selected area');
+    return { success: true, message: `Ignited ${count} cells`, count };
+  }
+  return apiClient.post<{ success: boolean; message: string; count: number }>('/simulation/ignite-area', data).then((r) => r.data);
+};
+
 export const tick = async () => {
   if (await isUsingMock()) return mockEngine.tick();
   return apiClient.post<TickResponse>('/simulation/tick').then((r) => r.data);
@@ -61,14 +72,20 @@ export const getStats = async () => {
   return apiClient.get<Stats>('/simulation/stats').then((r) => r.data);
 };
 
-export const getWeather = async () => {
+export const getWeather = async (lat?: number, lon?: number) => {
   if (await isUsingMock()) return { ...mockEngine.weather };
-  return apiClient.get<WeatherResponse>('/weather').then((r) => r.data);
+  const params: Record<string, number> = {};
+  if (lat !== undefined) params.lat = lat;
+  if (lon !== undefined) params.lon = lon;
+  return apiClient.get<WeatherResponse>('/weather', { params }).then((r) => r.data);
 };
 
-export const getWeatherLive = async () => {
+export const getWeatherLive = async (lat?: number, lon?: number) => {
   if (await isUsingMock()) return { ...mockEngine.weather };
-  return apiClient.get<WeatherResponse>('/weather/live').then((r) => r.data);
+  const params: Record<string, number> = {};
+  if (lat !== undefined) params.lat = lat;
+  if (lon !== undefined) params.lon = lon;
+  return apiClient.get<WeatherResponse>('/weather/live', { params }).then((r) => r.data);
 };
 
 export const overrideWeather = async (data: WeatherOverrideRequest) => {
@@ -82,6 +99,11 @@ export const getAlerts = async () => {
     return { alerts } as AlertsResponse;
   }
   return apiClient.get<AlertsResponse>('/alerts').then((r) => r.data);
+};
+
+export const getLiveFires = async () => {
+  if (await isUsingMock()) return { fires: [], count: 0 };
+  return apiClient.get<FiresResponse>('/fires/live').then((r) => r.data);
 };
 
 export const queryLLM = async (data: LLMQueryRequest) => {
