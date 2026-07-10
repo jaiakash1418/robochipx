@@ -1,3 +1,5 @@
+import numpy as np
+from scipy.ndimage import binary_dilation
 import httpx
 from typing import Optional
 from fastapi import APIRouter, HTTPException
@@ -17,6 +19,7 @@ from services.simulation import simulation
 from services.weather import weather_service
 from services.firms import firms_service
 from services.rag import build_rag_context
+from services.landcover import landcover_service
 from core.alerts import check_alerts
 from core.grid import CELL_STATES
 from core.pathfinding import find_safest_route
@@ -114,6 +117,18 @@ async def set_location(lat: Optional[float] = None, lon: Optional[float] = None)
     return {"success": True, "lat": lat, "lon": lon, "state": simulation._build_response()}
 
 
+@router.post("/terrain/regenerate")
+async def regenerate_terrain(real: bool = True):
+    await simulation.regenerate_terrain(use_real_data=real)
+    return {"success": True, "real": real, "state": simulation._build_response()}
+
+
+@router.post("/settings/landcover")
+async def set_landcover(enabled: bool = True):
+    simulation.use_landcover = enabled
+    return {"success": True, "use_landcover": enabled}
+
+
 @router.get("/weather/live")
 async def get_live_weather(lat: float = None, lon: float = None):
     try:
@@ -146,6 +161,27 @@ async def get_active_fires(lat: float = None, lon: float = None, radius: float =
     lon = lon or settings.default_lon
     try:
         fires = await firms_service.nearest_fires(lat, lon, radius)
+        return {"fires": fires, "source": "NASA FIRMS", "api_key_configured": firms_service.is_available()}
+    except Exception as e:
+        return {"fires": [], "source": "NASA FIRMS", "api_key_configured": firms_service.is_available(), "error": str(e)}
+
+
+@router.get("/fires/live")
+async def get_live_fires(lat: float = None, lon: float = None, radius: float = 0.5):
+    lat = lat or settings.default_lat
+    lon = lon or settings.default_lon
+    try:
+        fires = await firms_service.nearest_fires(lat, lon, radius)
+        return {"fires": fires, "count": len(fires)}
+    except Exception as e:
+        return {"fires": [], "count": 0, "error": str(e)}
+
+
+@router.get("/fires/global")
+async def get_global_fires(west: float, south: float, east: float, north: float, source: str = "viirs_snpp", day_range: int = 1):
+    """Fetch FIRMS fires for an arbitrary bounding box (west, south, east, north)."""
+    try:
+        fires = await firms_service.fetch_fires_bbox(west, south, east, north, source, day_range)
         return {"fires": fires, "source": "NASA FIRMS", "api_key_configured": firms_service.is_available()}
     except Exception as e:
         return {"fires": [], "source": "NASA FIRMS", "api_key_configured": firms_service.is_available(), "error": str(e)}
@@ -251,6 +287,35 @@ async def dispatcher_status():
         "active_fires": active_fires,
         "total_dispatched": len(dispatches),
     }
+
+
+@router.get("/evacuation-zones")
+async def get_evacuation_zones():
+    grid = simulation.grid
+    fire = grid.fire_mask
+    towns = grid.towns
+    burning = fire == 1
+    if not burning.any():
+        return {"zones": [], "towns_affected": []}
+    danger_zone = binary_dilation(burning, structure=np.ones((3, 3)), iterations=3)
+    size = grid.size
+    south, west, north, east = grid.bounds
+    affected = []
+    for t in towns:
+        gx, gy = t["x"], t["y"]
+        if 0 <= gx < size and 0 <= gy < size and danger_zone[gy, gx]:
+            affected.append(t)
+    return {"zones": affected, "towns_affected": [t["name"] for t in affected]}
+
+
+@router.get("/landcover")
+async def get_landcover(lat: float = None, lon: float = None):
+    lat = lat or settings.default_lat
+    lon = lon or settings.default_lon
+    try:
+        return await landcover_service.generate(lat, lon)
+    except Exception as e:
+        return {"fuel_map": [], "landcover": [], "classes": [], "source": f"error: {str(e)}"}
 
 
 @router.get("/model/evaluation")

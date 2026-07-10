@@ -115,15 +115,17 @@ export type ToolMode = 'off' | 'select';
 
 export type CellState = 0 | 1 | 2;
 
-export type FuelType = 0 | 1 | 2 | 3 | 4 | 5;
+export type FuelType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
-export const FUEL_COLORS: Record<FuelType, string> = {
+export const FUEL_COLORS: Record<number, string> = {
   0: '#2d5a27',
   1: '#a4b843',
   2: '#3b82f6',
   3: '#d4a373',
   4: '#6b7280',
   5: '#92400e',
+  6: '#5f9ea0',
+  7: '#f0e68c',
 };
 
 export interface DemoRunResponse {
@@ -194,4 +196,44 @@ export interface EvacuationRouteRequest {
 export interface EvacuationRouteResponse {
   path: { x: number; y: number }[];
   found: boolean;
+}
+
+export interface FirmsFire {
+  lat: number;
+  lon: number;
+  brightness: number;
+  confidence: string;
+  acq_date: string;
+  acq_time: string;
+  satellite: string;
+  daynight: string;
+}
+
+export interface GlobalFiresResponse {
+  fires: FirmsFire[];
+  source: string;
+  api_key_configured: boolean;
+  error?: string;
+}
+
+export interface LandcoverResponse {
+  fuel_map: number[][];
+  landcover: number[][];
+  classes: string[][];
+  source: string;
+  towns?: Town[];
+}
+
+export interface EvacuationZonesResponse {
+  zones: { name: string; lat: number; lon: number }[];
+  towns_affected: string[];
+}
+
+export interface BBoxRequest {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+  source?: string;
+  day_range?: number;
 }

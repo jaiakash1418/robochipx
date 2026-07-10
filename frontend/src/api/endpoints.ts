@@ -18,6 +18,11 @@ import type {
   EvacuationRouteResponse,
   DispatcherStatusResponse,
   DispatchOrder,
+  GlobalFiresResponse,
+  BBoxRequest,
+  FirmsFire,
+  LandcoverResponse,
+  EvacuationZonesResponse,
 } from './types';
 
 let useMock: boolean | null = null;
@@ -112,6 +117,42 @@ export const getLiveFires = async () => {
   return apiClient.get<FiresResponse>('/fires/live').then((r) => r.data);
 };
 
+export const getGlobalFires = async (bbox: BBoxRequest) => {
+  if (await isUsingMock()) {
+    return {
+      fires: MOCK_GLOBAL_FIRES.filter(f =>
+        f.lat >= bbox.south && f.lat <= bbox.north &&
+        f.lon >= bbox.west && f.lon <= bbox.east
+      ),
+      source: 'NASA FIRMS (mock)',
+      api_key_configured: true,
+    } as GlobalFiresResponse;
+  }
+  const params = {
+    west: bbox.west,
+    south: bbox.south,
+    east: bbox.east,
+    north: bbox.north,
+    source: bbox.source ?? 'viirs_snpp',
+    day_range: bbox.day_range ?? 1,
+  };
+  return apiClient.get<GlobalFiresResponse>('/fires/global', { params }).then((r) => r.data);
+};
+
+// Mock global fires for offline testing - real-world major wildfire locations
+const MOCK_GLOBAL_FIRES: FirmsFire[] = [
+  { lat: 37.8, lon: -121.5, brightness: 350, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // California
+  { lat: 34.1, lon: -117.8, brightness: 380, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // LA area
+  { lat: 45.5, lon: -122.0, brightness: 320, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Oregon
+  { lat: -33.9, lon: 151.2, brightness: 340, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Australia (Sydney area)
+  { lat: -23.5, lon: -46.6, brightness: 310, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Brazil (Amazon)
+  { lat: 55.7, lon: 37.6, brightness: 300, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Russia (Moscow)
+  { lat: 48.9, lon: 2.3, brightness: 290, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // France (Paris)
+  { lat: -6.2, lon: 106.8, brightness: 330, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Indonesia
+  { lat: 5.6, lon: -74.1, brightness: 340, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // Colombia
+  { lat: 31.2, lon: 121.5, brightness: 320, confidence: 'nominal', acq_date: '2024-07-01', acq_time: '1200', satellite: 'VIIRS_SNPP_NRT', daynight: 'D' }, // China (Shanghai)
+] as const;
+
 export const clearBatch = async (cells: { x: number; y: number }[]) => {
   if (await isUsingMock()) {
     for (const c of cells) mockEngine.clear(c.x, c.y);
@@ -133,6 +174,16 @@ export const evaluateModel = async () => {
 export const setBackendLocation = async (lat?: number, lon?: number) => {
   if (await isUsingMock()) return { success: true, lat, lon };
   return apiClient.post<{ success: boolean; lat?: number; lon?: number; state?: TickResponse }>('/location/set', null, { params: { lat, lon } }).then((r) => r.data);
+};
+
+export const regenerateTerrain = async (real: boolean) => {
+  if (await isUsingMock()) return { success: true, real };
+  return apiClient.post<{ success: boolean; real: boolean; state?: TickResponse }>('/terrain/regenerate', null, { params: { real } }).then((r) => r.data);
+};
+
+export const setLandcoverEnabled = async (enabled: boolean) => {
+  if (await isUsingMock()) return { success: true, use_landcover: enabled };
+  return apiClient.post<{ success: boolean; use_landcover: boolean }>('/settings/landcover', null, { params: { enabled } }).then((r) => r.data);
 };
 
 export const igniteBatch = async (cells: { x: number; y: number }[]) => {
@@ -159,6 +210,25 @@ export const runDemo = async (ticks?: number, lat?: number, lon?: number) => {
   if (lat !== undefined) params.lat = lat;
   if (lon !== undefined) params.lon = lon;
   return apiClient.post<DemoRunResponse>('/demo/run', null, { params }).then((r) => r.data);
+};
+
+export const fetchLandcover = async (lat: number, lon: number) => {
+  if (await isUsingMock()) {
+    return {
+      fuel_map: [],
+      landcover: [],
+      classes: [],
+      source: 'mock',
+    } as LandcoverResponse;
+  }
+  return apiClient.get<LandcoverResponse>('/landcover', { params: { lat, lon } }).then((r) => r.data);
+};
+
+export const fetchEvacuationZones = async () => {
+  if (await isUsingMock()) {
+    return { zones: [], towns_affected: [] } as EvacuationZonesResponse;
+  }
+  return apiClient.get<EvacuationZonesResponse>('/evacuation-zones').then((r) => r.data);
 };
 
 export const queryLLM = async (data: LLMQueryRequest) => {

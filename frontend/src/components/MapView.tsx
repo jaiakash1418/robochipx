@@ -1,8 +1,9 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, memo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSimulation } from '../context/SimulationContext';
-import { FUEL_COLORS, type FuelType, type CellState, type LiveFire } from '../api/types';
+import { FUEL_COLORS, type CellState, type LiveFire, type FirmsFire, type BBoxRequest } from '../api/types';
+import { fetchLandcover } from '../api/endpoints';
 import MapWeatherOverlay from './MapWeatherOverlay';
 import InfoTooltip from './InfoTooltip';
 import { convex } from '@turf/turf';
@@ -12,6 +13,8 @@ const GRID_SIZE = 64;
 const CANVAS_SIZE = 1024;
 const CELL_SIZE = CANVAS_SIZE / GRID_SIZE;
 const GRID_SPAN = 1;
+const SIM_ZOOM = 9;
+const WORLD_ZOOM = 3;
 
 function computeBounds(center: [number, number]): L.LatLngBounds {
   return L.latLngBounds(
@@ -102,26 +105,54 @@ function getFirePerimeter(fireMask: CellState[][], bounds: L.LatLngBounds): Feat
 }
 
 interface Props {
-  igniteMode: 'point' | 'area' | 'move' | 'normal';
+  mode: 'world' | 'simulation';
+  igniteMode: 'point' | 'area' | 'move';
   gridCenter: [number, number];
   onGridCenterChange: (c: [number, number]) => void;
   liveFires: LiveFire[];
+  globalFires: FirmsFire[];
   flyToFire: [number, number] | null;
   onFlyDone: () => void;
   userLocation: [number, number] | null;
+  onSelectFireLocation: (lat: number, lon: number) => void;
+  onViewportChange: (bbox: BBoxRequest) => void;
+  landcoverMode?: boolean;
+  heatmapMode?: boolean;
   evacMode?: boolean;
   onSafeZoneClick?: (gridX: number, gridY: number) => void;
   evacPath?: { x: number; y: number }[];
   safeZone?: { x: number; y: number } | null;
 }
 
-export default function MapView({ igniteMode, gridCenter, onGridCenterChange, liveFires, flyToFire, onFlyDone, userLocation, evacMode, onSafeZoneClick, evacPath, safeZone }: Props) {
+const FUEL_RISK_COLORS: Record<number, string> = {
+  0: '#1a9850',
+  1: '#a6d96a',
+  2: '#3288bd',
+  3: '#fdae61',
+  4: '#f46d43',
+  5: '#d73027',
+};
+
+const LANDCOVER_COLORS: Record<string, string> = {
+  forest: '#2d5a27',
+  grassland: '#a4b843',
+  water: '#3b82f6',
+  barren: '#6b7280',
+  urban: '#92400e',
+  shrubland: '#d4a373',
+  agriculture: '#f0e68c',
+  wetland: '#5f9ea0',
+  snow_ice: '#ffffff',
+};
+
+function MapView({ mode, igniteMode, gridCenter, onGridCenterChange, liveFires, globalFires, flyToFire, onFlyDone, userLocation, onSelectFireLocation, onViewportChange, landcoverMode, heatmapMode, evacMode, onSafeZoneClick, evacPath, safeZone }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<L.ImageOverlay | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const windParticlesRef = useRef<{ x: number; y: number; speed: number; spawnTime: number; lifetime: number }[]>([]);
   const rafRef = useRef<number>(0);
+  const gridCounterRef = useRef(0);
   const perimeterLayerRef = useRef<L.GeoJSON | null>(null);
   const gridSnapshotRef = useRef<ImageData | null>(null);
   const selectionRectRef = useRef<L.Rectangle | null>(null);
@@ -129,6 +160,9 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
   const dragStartRef = useRef<L.LatLng | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
   const liveFiresLayerRef = useRef<L.LayerGroup | null>(null);
+  const worldFiresLayerRef = useRef<L.LayerGroup | null>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const userLocationLayerRef = useRef<L.LayerGroup | null>(null);
   const boundsRef = useRef<L.LatLngBounds>(computeBounds(gridCenter));
   const gridToLatLngRef = useRef<(cellX: number, cellY: number) => [number, number]>(
@@ -142,7 +176,13 @@ export default function MapView({ igniteMode, gridCenter, onGridCenterChange, li
   const weatherRef = useRef(weather);
   weatherRef.current = weather;
   const lastOverlayUpdateRef = useRef(0);
-const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() => {});
+  const landcoverCacheRef = useRef<Map<string, any>>(new Map());
+  const landcoverGridRef = useRef<number[][] | null>(null);
+  const landcoverClassesRef = useRef<string[][] | null>(null);
+  const landcoverSourceRef = useRef<string>('');
+  const heatmapModeRef = useRef(false);
+  heatmapModeRef.current = heatmapMode ?? false;
+  const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() => {});
 
   const updatePerimeter = useCallback(() => {
     const map = mapRef.current;
@@ -178,33 +218,81 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
 
     ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
+    // Semi-transparent dark background so grid stands out against satellite
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+    const lcGrid = landcoverGridRef.current;
+    const lcClasses = landcoverClassesRef.current;
+    const isHeatmap = heatmapModeRef.current;
+    let drawnCells = 0;
+
     for (let row = 0; row < GRID_SIZE; row++) {
       for (let col = 0; col < GRID_SIZE; col++) {
         let color = 'rgba(255,255,255,0.04)';
 
-        const fuelType = fuelMap[row]?.[col] as FuelType | undefined;
-        if (fuelType !== undefined) {
-          color = hexToRgba(FUEL_COLORS[fuelType], 0.45);
+        if (isHeatmap) {
+          const ft = fuelMap[row]?.[col] as number | undefined;
+          if (ft !== undefined) color = hexToRgba(FUEL_RISK_COLORS[ft] || '#888', 0.7);
+        } else if (lcGrid && lcClasses) {
+          const cls = lcClasses[row]?.[col];
+          const lcColor = cls ? LANDCOVER_COLORS[cls] : undefined;
+          if (lcColor) color = hexToRgba(lcColor, 0.7);
+        } else {
+          const fuelType = fuelMap[row]?.[col] as number | undefined;
+          if (fuelType !== undefined) color = hexToRgba(FUEL_COLORS[fuelType] || '#888', 0.7);
         }
+
+        if (color !== 'rgba(255,255,255,0.04)') drawnCells++;
 
         const cellState = fireMask[row]?.[col] as CellState | undefined;
         if (cellState !== undefined && cellState !== 0) {
           color = cellState === 1 ? '#ff6b35' : '#1a1a1a';
-          if (cellState === 1) {
-            ctx.shadowColor = 'rgba(255,107,53,0.4)';
-            ctx.shadowBlur = 8;
-          }
         }
 
         ctx.fillStyle = color;
         ctx.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
 
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
         ctx.lineWidth = 0.5;
         ctx.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
       }
+    }
+
+    console.log(`drawGridCanvas: ${drawnCells}/${GRID_SIZE * GRID_SIZE} cells drawn, fuelMap length=${fuelMap.length}`);
+    gridSnapshotRef.current = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+    // Glow pass for burning cells (single gradient per cell, cheaper than per-cell shadowBlur)
+    const burning: { col: number; row: number }[] = [];
+    for (let r = 0; r < GRID_SIZE; r++)
+      for (let c = 0; c < GRID_SIZE; c++)
+        if ((fireMask[r]?.[c] as CellState) === 1) burning.push({ col: c, row: r });
+    if (burning.length > 0 && burning.length <= 64) {
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, CELL_SIZE * 2);
+      g.addColorStop(0, 'rgba(255,107,53,0.20)');
+      g.addColorStop(1, 'rgba(255,107,53,0)');
+      for (const b of burning) {
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(b.col * CELL_SIZE + CELL_SIZE / 2, b.row * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE * 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Source labels
+    const lcSource = landcoverSourceRef.current;
+    if (isHeatmap) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(CANVAS_SIZE - 120, 0, 120, 22);
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px monospace';
+      ctx.fillText('Heatmap: fuel risk', CANVAS_SIZE - 114, 15);
+    } else if (lcSource && !isHeatmap) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(0, CANVAS_SIZE - 22, 200, 22);
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px monospace';
+      ctx.fillText(`Landcover: ${lcSource}`, 6, CANVAS_SIZE - 7);
     }
 
     gridSnapshotRef.current = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
@@ -359,13 +447,17 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
       ctx.shadowBlur = 0;
     }
 
-    drawWindParticlesRef.current(ctx);
+    gridCounterRef.current++;
+    if (gridCounterRef.current % 2 === 0) {
+      drawWindParticlesRef.current(ctx);
+    }
 
     const now = performance.now();
     if (now - lastOverlayUpdateRef.current > 66) {
       overlay.setUrl(canvas.toDataURL());
       lastOverlayUpdateRef.current = now;
     }
+    if (gridCounterRef.current % 60 === 0) console.log(`compositeFrame #${gridCounterRef.current}: overlay=${!!overlay} canvas=${!!canvas}`);
   }, []);
 
   useEffect(() => {
@@ -389,6 +481,37 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
     drawGridCanvas();
     updatePerimeter();
   }, [drawGridCanvas, updatePerimeter]);
+
+  // Landcover fetch with caching
+  useEffect(() => {
+    if (!landcoverMode || !state.landcoverEnabled) {
+      landcoverGridRef.current = null;
+      landcoverClassesRef.current = null;
+      landcoverSourceRef.current = '';
+      drawGridCanvas();
+      return;
+    }
+    let cancelled = false;
+    const [lat, lon] = gridCenter;
+    const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    const cached = landcoverCacheRef.current.get(key);
+    if (cached) {
+      landcoverGridRef.current = cached.landcover.length > 0 ? cached.landcover : cached.fuel_map;
+      landcoverClassesRef.current = cached.classes;
+      landcoverSourceRef.current = cached.source;
+      drawGridCanvas();
+    } else {
+      fetchLandcover(lat, lon).then((data) => {
+        if (cancelled) return;
+        landcoverCacheRef.current.set(key, data);
+        landcoverGridRef.current = data.landcover.length > 0 ? data.landcover : data.fuel_map;
+        landcoverClassesRef.current = data.classes;
+        landcoverSourceRef.current = data.source;
+        drawGridCanvas();
+      }).catch(() => { if (!cancelled) landcoverSourceRef.current = 'mock'; });
+    }
+    return () => { cancelled = true; };
+  }, [landcoverMode, gridCenter]);
 
   const handleAreaStart = useCallback((e: L.LeafletMouseEvent, map: L.Map) => {
     dragStartRef.current = e.latlng;
@@ -435,7 +558,7 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
     onGridCenterChange([e.latlng.lat, e.latlng.lng]);
   }, [onGridCenterChange]);
 
-  // Initialize map
+  // Initialize map once
   useEffect(() => {
     if (mapRef.current || !containerRef.current) return;
 
@@ -445,9 +568,10 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
     canvasRef.current = canvas;
 
     const map = L.map(containerRef.current, {
-      center: [38, -121.5],
-      zoom: 9,
+      center: [20, 0],
+      zoom: WORLD_ZOOM,
       zoomControl: false,
+      worldCopyJump: true,
     });
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -456,18 +580,6 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       { maxZoom: 19, attribution: '&copy; Esri' },
     ).addTo(map);
-
-    const overlay = L.imageOverlay(canvas.toDataURL(), boundsRef.current, {
-      interactive: true,
-    }).addTo(map);
-    overlayRef.current = overlay;
-
-    gridRectRef.current = L.rectangle(boundsRef.current, {
-      color: '#ff6b35',
-      weight: 2,
-      fill: false,
-      opacity: 0.6,
-    }).addTo(map);
 
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 100);
@@ -480,27 +592,130 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
     };
   }, []);
 
-  // Update bounds when gridCenter changes
+  // Handle mode switching — add/remove sim layers
   useEffect(() => {
     const map = mapRef.current;
-    const overlay = overlayRef.current;
-    const rect = gridRectRef.current;
-    if (!map || !overlay || !rect) return;
+    if (!map) return;
+
+    if (mode === 'simulation') {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      // Create grid overlay if not exists
+      if (!overlayRef.current) {
+        overlayRef.current = L.imageOverlay(canvas.toDataURL(), boundsRef.current, {
+          interactive: true,
+        }).addTo(map);
+      }
+
+      // Create grid rect if not exists
+      if (!gridRectRef.current) {
+        gridRectRef.current = L.rectangle(boundsRef.current, {
+          color: '#ff6b35',
+          weight: 2,
+          fill: false,
+          opacity: 0.6,
+        }).addTo(map);
+      }
+
+      map.flyTo(gridCenter, SIM_ZOOM, { duration: 1.2 });
+    } else {
+      // Remove sim-specific layers
+      if (overlayRef.current) {
+        map.removeLayer(overlayRef.current);
+        overlayRef.current = null;
+      }
+      if (gridRectRef.current) {
+        map.removeLayer(gridRectRef.current);
+        gridRectRef.current = null;
+      }
+      if (perimeterLayerRef.current) {
+        map.removeLayer(perimeterLayerRef.current);
+        perimeterLayerRef.current = null;
+      }
+
+      map.setZoom(WORLD_ZOOM);
+    }
+  }, [mode, gridCenter]);
+
+  // World FIRMS markers
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mode !== 'world') return;
+
+    if (worldFiresLayerRef.current) {
+      map.removeLayer(worldFiresLayerRef.current);
+      worldFiresLayerRef.current = null;
+    }
+
+    if (globalFires.length === 0) return;
+
+    const layer = L.layerGroup().addTo(map);
+    worldFiresLayerRef.current = layer;
+
+    for (const fire of globalFires) {
+      const size = Math.min(22, Math.max(10, 8 + fire.brightness / 60));
+      const icon = L.divIcon({
+        className: 'world-fire-icon',
+        html: `<span style="font-size:${size}px">🔥</span>`,
+        iconSize: [size + 6, size + 6],
+        iconAnchor: [(size + 6) / 2, (size + 6) / 2],
+      });
+      const marker = L.marker([fire.lat, fire.lon], { icon });
+      marker.bindTooltip(
+        `Brightness: ${fire.brightness}<br/>Confidence: ${fire.confidence}<br/>Satellite: ${fire.satellite}`,
+        { direction: 'top' },
+      );
+      marker.on('click', () => {
+        onSelectFireLocation(fire.lat, fire.lon);
+      });
+      layer.addLayer(marker);
+    }
+
+    return () => {
+      map.removeLayer(layer);
+      if (worldFiresLayerRef.current === layer) worldFiresLayerRef.current = null;
+    };
+  }, [globalFires, mode, onSelectFireLocation]);
+
+  // Viewport tracking for world mode
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mode !== 'world') return;
+
+    const handler = () => {
+      const b = map.getBounds();
+      onViewportChange({
+        west: b.getWest(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        north: b.getNorth(),
+      });
+    };
+
+    handler();
+    map.on('moveend', handler);
+    return () => { map.off('moveend', handler); };
+  }, [mode, onViewportChange]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mode !== 'simulation') return;
 
     const newBounds = computeBounds(gridCenter);
     boundsRef.current = newBounds;
     gridToLatLngRef.current = makeGridToLatLng(newBounds);
     latLngToGridRef.current = makeLatLngToGrid(newBounds);
 
-    overlay.setBounds(newBounds);
-    rect.setBounds(newBounds);
-    map.flyTo(gridCenter, 9, { duration: 1.2 });
-  }, [gridCenter]);
+    overlayRef.current?.setBounds(newBounds);
+    gridRectRef.current?.setBounds(newBounds);
+    map.flyTo(gridCenter, SIM_ZOOM, { duration: 1.2 });
+  }, [gridCenter, mode]);
 
-  // Live fires — render from props
+  // Live fires — render from props (simulation mode only, world mode uses globalFires)
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || mode !== 'simulation') return;
 
     if (liveFiresLayerRef.current) {
       map.removeLayer(liveFiresLayerRef.current);
@@ -536,7 +751,7 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
       map.removeLayer(layer);
       if (liveFiresLayerRef.current === layer) liveFiresLayerRef.current = null;
     };
-  }, [liveFires]);
+  }, [liveFires, mode]);
 
   // User location marker
   useEffect(() => {
@@ -576,20 +791,19 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
     };
   }, [userLocation]);
 
-  
-
-  // Fly to a fire
+  // Fly to a fire or location
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !flyToFire) return;
-    map.flyTo(flyToFire, 9, { duration: 1.5 });
+    const zoom = mode === 'world' ? SIM_ZOOM - 2 : SIM_ZOOM;
+    map.flyTo(flyToFire, zoom, { duration: 1.5 });
     onFlyDone();
-  }, [flyToFire, onFlyDone]);
+  }, [flyToFire, onFlyDone, mode]);
 
-  // Mouse handlers
+  // Mouse handlers (simulation mode only)
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || mode !== 'simulation') return;
 
     if (evacMode) {
       map.dragging.enable();
@@ -618,17 +832,24 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
 
     if (igniteMode === 'point') {
       map.dragging.enable();
-      const clickHandler = (e: L.LeafletMouseEvent) => {
+      const igniteAt = (latlng: L.LatLng) => {
         const gridBounds = boundsRef.current;
-        if (!gridBounds.contains(e.latlng)) return;
+        if (!gridBounds.contains(latlng)) return;
         const toGrid = latLngToGridRef.current;
-        const [x, y] = toGrid(e.latlng);
-        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
-          doIgnite(x, y);
-        }
+        const [x, y] = toGrid(latlng);
+        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) doIgnite(x, y);
+      };
+      const clickHandler = (e: L.LeafletMouseEvent) => igniteAt(e.latlng);
+      const dblClickHandler = (e: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(e);
+        igniteAt(e.latlng);
       };
       map.on('click', clickHandler);
-      return () => { map.off('click', clickHandler); };
+      map.on('dblclick', dblClickHandler);
+      return () => {
+        map.off('click', clickHandler);
+        map.off('dblclick', dblClickHandler);
+      };
     } else if (igniteMode === 'area') {
       map.dragging.disable();
       const down = (e: L.LeafletMouseEvent) => {
@@ -671,11 +892,12 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
         map.off('click', clickHandler);
       };
     }
-  }, [igniteMode, evacMode, onSafeZoneClick, doIgnite, doIgniteArea, handleAreaStart, handleAreaMove, handleAreaEnd, handleMoveClick]);
+  }, [igniteMode, evacMode, onSafeZoneClick, doIgnite, doIgniteArea, handleAreaStart, handleAreaMove, handleAreaEnd, handleMoveClick, mode]);
 
+  // User marker with grid popup (simulation mode only)
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || mode !== 'simulation') return;
 
     if (userMarkerRef.current) {
       map.removeLayer(userMarkerRef.current);
@@ -699,7 +921,7 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
       marker.bindPopup(`<b>Your Location</b><br/>${lat.toFixed(4)}, ${lon.toFixed(4)}<br/>Grid: (${x}, ${y})`);
       userMarkerRef.current = marker;
     }
-  }, [userLocation]);
+  }, [userLocation, mode]);
 
   /* --- selection tool (draw rectangle, persists after release) --- */
   const selRectRef = useRef<L.Rectangle | null>(null);
@@ -707,7 +929,7 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || mode !== 'simulation') return;
     const gridBounds = boundsRef.current;
 
     const drawPersistentSel = () => {
@@ -802,7 +1024,7 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
       map.off('mousemove', onMove);
       map.off('mouseup', onUp);
     };
-  }, [selectActive, selectedArea, setSelectedArea]);
+  }, [selectActive, selectedArea, setSelectedArea, mode]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -821,3 +1043,5 @@ function hexToRgba(hex: string, alpha: number): string {
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${alpha})`;
 }
+
+export default memo(MapView);

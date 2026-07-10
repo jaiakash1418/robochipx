@@ -1,9 +1,7 @@
 import json
 import logging
 import math
-import urllib.error
-import urllib.parse
-import urllib.request
+import os
 from hashlib import md5
 from pathlib import Path
 
@@ -66,15 +64,14 @@ class Grid:
         self.fire_mask: np.ndarray | None = None
         self.step: int = 0
         self.towns: list[dict] = []
-        # (south, west, north, east) lat/lon box the grid covers - needed to
-        # line up the grid with a Leaflet map (ImageOverlay / L.rectangle
-        # bounds, and to convert clicks to cells).
         self.bounds: tuple[float, float, float, float] | None = None
+        self.water_mask: np.ndarray | None = None
         self._init_empty()
 
     def _init_empty(self):
         self.fuel_map = np.zeros((self.size, self.size), dtype=np.int8)
         self.fire_mask = np.zeros((self.size, self.size), dtype=np.int8)
+        self.water_mask = np.zeros((self.size, self.size), dtype=bool)
         self.towns = []
         self.step = 0
 
@@ -106,6 +103,7 @@ class Grid:
         )
 
     def save_fuel_map(self, path: str):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             json.dump(
                 {
@@ -120,43 +118,59 @@ class Grid:
     # ------------------------------------------------------------------
     # Terrain generation
     # ------------------------------------------------------------------
-    async def generate_terrain(self, lat: float, lon: float, use_real_data: bool = True):
+    async def generate_terrain(self, lat: float, lon: float, use_real_data: bool = True, use_landcover: bool = True):
         """Build the fuel map for the area around (lat, lon).
 
         Priority order:
-          1. OpenTopography elevation → base fuel (vegetation from real terrain)
-             + OSM features (water, roads, towns) overlaid on top
-          2. OSM alone (existing behavior)
+          1. Overpass OSM (accurate water, roads, towns) → landcover ONNX fills gaps
+          2. OSM alone
           3. Synthetic noise fallback
         """
-        self._init_empty()
         bounds = self._bbox_for(lat, lon)
         self.bounds = bounds
+        n = self.size
 
-        elev_ok = False
         osm_ok = False
+        lc_ok = False
 
         if use_real_data:
-            from services.terrain import terrain_service
+            self.fuel_map = np.full((n, n), -1, dtype=np.int8)
+            self.fire_mask = np.zeros((n, n), dtype=np.int8)
+            self.towns = []
+            self.step = 0
 
-            # 1. Try OpenTopography for base vegetation map
-            result = await terrain_service.generate(lat, lon, self.size, bounds)
-            if result and result["fuel_map"] is not None:
-                self.fuel_map = result["fuel_map"]
-                self.towns = result.get("towns", [])
-                elev_ok = True
-
-            # 2. Fetch OSM data and overlay features
             osm_data = self._fetch_osm_data(bounds)
             if osm_data and osm_data.get("elements"):
                 self._apply_osm_overlay(osm_data, bounds)
                 osm_ok = True
 
-        if not elev_ok and not osm_ok:
-            self._generate_terrain_synthetic(lat, lon)
+            if use_landcover:
+                from services.landcover import landcover_service
 
-        self.fire_mask = np.zeros((self.size, self.size), dtype=np.int8)
-        # Cache the generated fuel map for faster subsequent startups
+                lc = await landcover_service.generate(lat, lon, n)
+                if lc and lc.get("fuel_map") is not None:
+                    lc_fuel = np.array(lc["fuel_map"], dtype=np.int8)
+                    if osm_ok:
+                        unfilled = self.fuel_map == -1
+                        self.fuel_map[unfilled] = lc_fuel[unfilled]
+                        self.fuel_map[self.fuel_map == -1] = FUEL_TYPES["grass"]
+                    else:
+                        self.fuel_map = lc_fuel
+                        self.towns = lc.get("towns", [])
+                    lc_ok = True
+            else:
+                self.fuel_map[self.fuel_map == -1] = FUEL_TYPES["grass"]
+                lc_ok = True  # OSM-only data is enough
+
+        if not osm_ok and not lc_ok:
+            self._generate_terrain_synthetic(lat, lon)
+            logger.info(f"Synthetic terrain generated at ({lat:.4f},{lon:.4f})")
+
+        unique, counts = np.unique(self.fuel_map, return_counts=True)
+        fuel_dist = {int(k): int(v) for k, v in zip(unique, counts)}
+        logger.info(f"Terrain done — osm_ok={osm_ok} lc_ok={lc_ok} fuel_dist={fuel_dist}")
+
+        self.fire_mask = np.zeros((n, n), dtype=np.int8)
         self.save_fuel_map(settings.fuel_map_path)
 
     # -- real terrain (OpenStreetMap via Overpass) ----------------------
@@ -196,37 +210,37 @@ class Grid:
         south, west, north, east = bounds
         bbox = f"{south},{west},{north},{east}"
         query = f"""
-        [out:json][timeout:{OVERPASS_TIMEOUT_S}];
-        (
-          way["natural"="water"]({bbox});
-          way["waterway"]({bbox});
-          way["landuse"="forest"]({bbox});
-          way["natural"="wood"]({bbox});
-          way["landuse"="grass"]({bbox});
-          way["natural"="grassland"]({bbox});
-          way["landuse"="farmland"]({bbox});
-          way["landuse"="meadow"]({bbox});
-          way["landuse"="residential"]({bbox});
-          way["building"]({bbox});
-          way["highway"]({bbox});
-          way["power"="line"]({bbox});
-          node["place"]({bbox});
-        );
-        out body;
-        >;
-        out skel qt;
-        """
+[out:json];
+(
+  way["natural"="water"]({bbox});
+  way["waterway"]({bbox});
+  way["landuse"="forest"]({bbox});
+  way["natural"="wood"]({bbox});
+  way["landuse"="grass"]({bbox});
+  way["natural"="grassland"]({bbox});
+  way["landuse"="farmland"]({bbox});
+  way["landuse"="meadow"]({bbox});
+  way["landuse"="residential"]({bbox});
+  way["building"]({bbox});
+  way["highway"]({bbox});
+  way["power"="line"]({bbox});
+  node["place"]({bbox});
+);
+out body;
+>;
+out skel qt;
+"""
         try:
-            payload = urllib.parse.urlencode({"data": query}).encode()
-            req = urllib.request.Request(
-                OVERPASS_URL,
-                data=payload,
-                headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
-            )
-            with urllib.request.urlopen(req, timeout=OVERPASS_TIMEOUT_S + 5) as resp:
-                return json.loads(resp.read().decode())
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Overpass API call failed: {e}")
+            import httpx
+            headers = {"User-Agent": "RoboChipX/1.0 wildfire-simulator"}
+            resp = httpx.post(OVERPASS_URL, data={"data": query}, headers=headers, timeout=OVERPASS_TIMEOUT_S)
+            resp.raise_for_status()
+            data = resp.json()
+            elements = data.get("elements", [])
+            logger.info(f"Overpass OK: {len(elements)} elements at bbox={bbox}")
+            return {"elements": elements}
+        except Exception as e:
+            logger.info(f"Overpass API call failed: {e}")
             return None
 
     def _apply_osm_overlay(self, osm: dict, bounds):
@@ -281,9 +295,14 @@ class Grid:
                 ways_by_key.setdefault((key, val), []).append(way)
                 ways_by_key.setdefault((key, None), []).append(way)
 
+        water_fuel = FUEL_TYPES["water"]
+        layer_counts = {}
         for (osm_key, osm_val), fuel_name, kind in OSM_LAYERS:
             fuel_value = FUEL_TYPES[fuel_name]
-            for way in ways_by_key.get((osm_key, osm_val), []):
+            is_water = fuel_value == water_fuel
+            ways_in_layer = ways_by_key.get((osm_key, osm_val), [])
+            painted = 0
+            for way in ways_in_layer:
                 coords = way_to_grid_coords(way)
                 if not coords:
                     continue
@@ -292,6 +311,15 @@ class Grid:
                     paint_polygon(coords, fuel_value)
                 else:
                     paint_line(coords, fuel_value)
+                painted += 1
+            if painted:
+                layer_counts[f"{osm_key}={osm_val}"] = painted
+            if is_water and self.water_mask is not None:
+                self.water_mask[self.fuel_map == water_fuel] = True
+        if layer_counts:
+            logger.info(f"OSM painted: {layer_counts}")
+        else:
+            logger.info("OSM overlay painted nothing — no matching OSM ways found")
 
         name_set = {t["name"] for t in self.towns}
         for p in places:
@@ -454,12 +482,13 @@ class Grid:
     # Fire state
     # ------------------------------------------------------------------
     def ignite(self, x: int, y: int) -> bool:
-        """x = column, y = row - matches the (row, col) convention used
-        everywhere else in this file (fuel_map[row, col], towns as
-        {x: col, y: row}). Previously this indexed fire_mask[x, y], which
-        silently transposed every ignition point off the diagonal."""
+        """x = column, y = row. Rejects water cells (OSM water_mask first, then fuel_map)."""
         if 0 <= x < self.size and 0 <= y < self.size:
             if self.fire_mask[y, x] == CELL_STATES["unburned"]:
+                if self.water_mask is not None and self.water_mask[y, x]:
+                    return False
+                if self.fuel_map[y, x] == FUEL_TYPES["water"]:
+                    return False
                 self.fire_mask[y, x] = CELL_STATES["burning"]
                 return True
         return False
