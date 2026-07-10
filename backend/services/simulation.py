@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 from core.grid import Grid
 from core.normalization import Normalizer
@@ -5,6 +6,8 @@ from core.alerts import check_alerts
 from models.unet import unet_model
 from services.weather import weather_service
 from services.environment import environment_service
+
+logger = logging.getLogger(__name__)
 
 
 class SimulationService:
@@ -15,14 +18,24 @@ class SimulationService:
         self.custom_lat: float | None = None
         self.custom_lon: float | None = None
         self.initial_zone: tuple[int, int, int, int] | None = None
+        self.use_landcover: bool = True
 
     async def set_custom_location(self, lat: float | None, lon: float | None):
         self.custom_lat = lat
         self.custom_lon = lon
         if lat is not None and lon is not None:
-            await self.grid.generate_terrain(lat, lon)
+            await self.grid.generate_terrain(lat, lon, use_landcover=self.use_landcover)
             self.running = False
             self.initial_zone = None
+
+    async def regenerate_terrain(self, use_real_data: bool = True):
+        if self.custom_lat is not None and self.custom_lon is not None:
+            logger.info(f"Regenerating terrain at ({self.custom_lat:.4f},{self.custom_lon:.4f}) real={use_real_data} landcover={self.use_landcover}")
+            await self.grid.generate_terrain(self.custom_lat, self.custom_lon, use_real_data=use_real_data, use_landcover=self.use_landcover)
+            self.running = False
+            self.initial_zone = None
+        else:
+            logger.info("Regenerate terrain skipped — no custom location set")
 
     def set_initial_zone(self, x1: int, y1: int, x2: int, y2: int):
         self.initial_zone = (x1, y1, x2, y2)
@@ -95,8 +108,12 @@ class SimulationService:
         neighbors = binary_dilation(burning, structure=structure)
 
         water = self.grid.fuel_map == 2
+        if self.grid.water_mask is not None:
+            water = water | self.grid.water_mask
+
         fuel_flammability = np.array([1.0, 1.3, 0.0, 0.8, 0.3, 0.1], dtype=np.float32)
-        flammability = fuel_flammability[self.grid.fuel_map.astype(int)]
+        fuel_indices = np.clip(self.grid.fuel_map.astype(int), 0, 5)
+        flammability = fuel_flammability[fuel_indices]
 
         adj_threshold = threshold / np.clip(flammability, 0.1, 1.5)
 

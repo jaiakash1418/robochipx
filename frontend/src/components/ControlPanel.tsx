@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Crop, Flame, Target, Eraser, Play } from 'lucide-react';
+import { Crop, Flame, Target, Eraser, Play, MapPin } from 'lucide-react';
 import { useSimulation } from '../context/SimulationContext';
 import InfoTooltip from './InfoTooltip';
 import LocationPicker from './LocationPicker';
@@ -20,8 +20,10 @@ export default function ControlPanel() {
     doIgniteBatch,
     doClearBatch,
     doDemoRun,
+    doRegenerateTerrain,
+    doSetLandcoverEnabled,
   } = useSimulation();
-  const { running, weather, selectActive, selectedArea, initialZone } = state;
+  const { running, weather, selectActive, selectedArea, initialZone, landcoverEnabled: stateLandcoverEnabled } = state;
 
   const [windSpeed, setWindSpeed] = useState(12);
   const [windDir, setWindDir] = useState(135);
@@ -29,6 +31,9 @@ export default function ControlPanel() {
   const [temp, setTemp] = useState(29);
   const [useLiveData, setUseLiveData] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [usingRealTerrain, setUsingRealTerrain] = useState(true);
+  const [terrainLoading, setTerrainLoading] = useState(false);
+  const [landcoverEnabled, setLandcoverEnabledState] = useState(state.landcoverEnabled);
 
   useEffect(() => {
     if (weather) {
@@ -38,6 +43,10 @@ export default function ControlPanel() {
       setTemp(Math.round(weather.temperature));
     }
   }, [weather]);
+
+  useEffect(() => {
+    setLandcoverEnabledState(stateLandcoverEnabled);
+  }, [stateLandcoverEnabled]);
 
   const handleOverride = () => {
     doOverrideWeather({
@@ -74,6 +83,46 @@ export default function ControlPanel() {
           style={{ width: '100%' }}
         >
           {useLiveData ? t('controls.live') : t('controls.demo')}
+        </button>
+      </div>
+
+      <div className="control-group">
+        <label>
+          <MapPin size={14} style={{ marginRight: 4 }} />
+          Terrain Source
+        </label>
+        <button
+          onClick={async () => {
+            setTerrainLoading(true);
+            try {
+              await doRegenerateTerrain(!usingRealTerrain);
+              setUsingRealTerrain(!usingRealTerrain);
+            } finally {
+              setTerrainLoading(false);
+            }
+          }}
+          disabled={terrainLoading}
+          className="btn"
+          style={{ width: '100%', fontSize: '0.75rem' }}
+        >
+          {terrainLoading ? 'Regenerating...' : (usingRealTerrain ? '🌍 Real (OSM)' : '🗺️ Synthetic')}
+        </button>
+      </div>
+
+      <div className="control-group">
+        <label>
+          Landcover ONNX
+        </label>
+        <button
+          onClick={async () => {
+            const next = !landcoverEnabled;
+            setLandcoverEnabledState(next);
+            await doSetLandcoverEnabled(next);
+          }}
+          className={`btn ${landcoverEnabled ? 'btn-primary' : ''}`}
+          style={{ width: '100%', fontSize: '0.75rem' }}
+        >
+          {landcoverEnabled ? '✅ Landcover ON' : '❌ Landcover OFF'}
         </button>
       </div>
 
@@ -273,6 +322,20 @@ export default function ControlPanel() {
           <p><strong>Timestamp:</strong> {new Date(weather.timestamp).toLocaleString()}</p>
         </div>
       )}
+
+      <div className="control-group" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10, marginTop: 6 }}>
+        <label style={{ marginBottom: 6 }}>Share / Export</label>
+        <button
+          className="btn"
+          onClick={() => {
+            const url = `${window.location.origin}${window.location.pathname}?lat=${state.customLat ?? ''}&lon=${state.customLon ?? ''}`;
+            navigator.clipboard.writeText(url).then(() => alert('Scenario URL copied!'));
+          }}
+          style={{ width: '100%', fontSize: '0.75rem' }}
+        >
+          Copy scenario link
+        </button>
+      </div>
     </div>
   );
 }

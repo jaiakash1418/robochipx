@@ -68,6 +68,7 @@ interface SimulationState {
   wsConnected: boolean;
   llmAnswer: string;
   llmLoading: boolean;
+  landcoverEnabled: boolean;
 }
 
 type Action =
@@ -90,7 +91,8 @@ type Action =
   | { type: 'LLM_CHUNK'; payload: string }
   | { type: 'LLM_DONE' }
   | { type: 'LLM_CLEAR' }
-  | { type: 'RESET' };
+  | { type: 'RESET' }
+  | { type: 'SET_LANDCOVER_ENABLED'; payload: boolean };
 
 const initialState: SimulationState = {
   running: false,
@@ -118,6 +120,7 @@ const initialState: SimulationState = {
   wsConnected: false,
   llmAnswer: '',
   llmLoading: false,
+  landcoverEnabled: true,
 };
 
 function reducer(state: SimulationState, action: Action): SimulationState {
@@ -141,12 +144,11 @@ function reducer(state: SimulationState, action: Action): SimulationState {
         alerts: action.payload.alerts,
         step: action.payload.step,
       };
-    case 'PUSH_HISTORY':
-      return {
-        ...state,
-        history: [...state.history, action.payload],
-        historyIndex: state.history.length,
-      };
+    case 'PUSH_HISTORY': {
+      const next = [...state.history, action.payload];
+      if (next.length > 100) next.splice(0, next.length - 100);
+      return { ...state, history: next, historyIndex: next.length - 1 };
+    }
     case 'SCRUB_TO': {
       const snap = state.history[action.payload];
       if (!snap) return state;
@@ -189,6 +191,8 @@ function reducer(state: SimulationState, action: Action): SimulationState {
       return { ...state, llmAnswer: '', llmLoading: false };
     case 'RESET':
       return { ...initialState };
+    case 'SET_LANDCOVER_ENABLED':
+      return { ...state, landcoverEnabled: action.payload };
     default:
       return state;
   }
@@ -223,6 +227,8 @@ interface SimulationContextValue {
   doDemoRun: (ticks?: number, lat?: number, lon?: number) => Promise<DemoRunResponse>;
   doLLMQuery: (query: string, context?: Record<string, unknown>) => void;
   clearLLM: () => void;
+  doRegenerateTerrain: (real: boolean) => Promise<void>;
+  doSetLandcoverEnabled: (enabled: boolean) => Promise<void>;
 }
 
 const SCENARIOS_KEY = 'wf-scenarios';
@@ -487,6 +493,26 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const doRegenerateTerrain = useCallback(async (real: boolean) => {
+    dispatch({ type: 'SET_LOADING' });
+    try {
+      await api.regenerateTerrain(real);
+      const state = await api.getState();
+      dispatch({ type: 'UPDATE_SIMULATION', payload: state });
+    } catch (err: any) {
+      dispatch({ type: 'SET_ERROR', payload: err.message });
+    }
+  }, []);
+
+  const doSetLandcoverEnabled = useCallback(async (enabled: boolean) => {
+    try {
+      await api.setLandcoverEnabled(enabled);
+      dispatch({ type: 'SET_LANDCOVER_ENABLED', payload: enabled });
+    } catch (err: any) {
+      dispatch({ type: 'SET_ERROR', payload: err.message });
+    }
+  }, []);
+
   const doLLMQuery = useCallback((query: string, context?: Record<string, unknown>) => {
     dispatch({ type: 'LLM_CLEAR' });
     if (connected) {
@@ -584,6 +610,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         doDemoRun,
         doLLMQuery,
         clearLLM,
+        doRegenerateTerrain,
+        doSetLandcoverEnabled,
       }}
     >
       {children}

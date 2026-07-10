@@ -48,7 +48,7 @@ class UNetInference:
             self.model.to(self.device)
             self.model.eval()
         except (FileNotFoundError, ImportError, RuntimeError) as e:
-            print(f"FireSenseNet load failed: {e}")
+            print(f"FireSenseNet checkpoint not found ({e}) — using fallback heuristic predictor")
             self.model = None
 
     def predict(self, input_tensor: np.ndarray, fuel_map: np.ndarray | None = None) -> np.ndarray:

@@ -17,6 +17,8 @@ import type {
   GlobalFiresResponse,
   BBoxRequest,
   FirmsFire,
+  LandcoverResponse,
+  EvacuationZonesResponse,
 } from './types';
 
 let useMock: boolean | null = null;
@@ -170,6 +172,16 @@ export const setBackendLocation = async (lat?: number, lon?: number) => {
   return apiClient.post<{ success: boolean; lat?: number; lon?: number; state?: TickResponse }>('/location/set', null, { params: { lat, lon } }).then((r) => r.data);
 };
 
+export const regenerateTerrain = async (real: boolean) => {
+  if (await isUsingMock()) return { success: true, real };
+  return apiClient.post<{ success: boolean; real: boolean; state?: TickResponse }>('/terrain/regenerate', null, { params: { real } }).then((r) => r.data);
+};
+
+export const setLandcoverEnabled = async (enabled: boolean) => {
+  if (await isUsingMock()) return { success: true, use_landcover: enabled };
+  return apiClient.post<{ success: boolean; use_landcover: boolean }>('/settings/landcover', null, { params: { enabled } }).then((r) => r.data);
+};
+
 export const igniteBatch = async (cells: { x: number; y: number }[]) => {
   if (await isUsingMock()) {
     for (const c of cells) mockEngine.ignite(c.x, c.y);
@@ -194,6 +206,25 @@ export const runDemo = async (ticks?: number, lat?: number, lon?: number) => {
   if (lat !== undefined) params.lat = lat;
   if (lon !== undefined) params.lon = lon;
   return apiClient.post<DemoRunResponse>('/demo/run', null, { params }).then((r) => r.data);
+};
+
+export const fetchLandcover = async (lat: number, lon: number) => {
+  if (await isUsingMock()) {
+    return {
+      fuel_map: [],
+      landcover: [],
+      classes: [],
+      source: 'mock',
+    } as LandcoverResponse;
+  }
+  return apiClient.get<LandcoverResponse>('/landcover', { params: { lat, lon } }).then((r) => r.data);
+};
+
+export const fetchEvacuationZones = async () => {
+  if (await isUsingMock()) {
+    return { zones: [], towns_affected: [] } as EvacuationZonesResponse;
+  }
+  return apiClient.get<EvacuationZonesResponse>('/evacuation-zones').then((r) => r.data);
 };
 
 export const queryLLM = async (data: LLMQueryRequest) => {

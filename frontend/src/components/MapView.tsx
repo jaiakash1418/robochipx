@@ -1,8 +1,9 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, memo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSimulation } from '../context/SimulationContext';
-import { FUEL_COLORS, type FuelType, type CellState, type LiveFire, type FirmsFire, type BBoxRequest } from '../api/types';
+import { FUEL_COLORS, type CellState, type LiveFire, type FirmsFire, type BBoxRequest } from '../api/types';
+import { fetchLandcover } from '../api/endpoints';
 import MapWeatherOverlay from './MapWeatherOverlay';
 import InfoTooltip from './InfoTooltip';
 import { convex } from '@turf/turf';
@@ -115,15 +116,39 @@ interface Props {
   userLocation: [number, number] | null;
   onSelectFireLocation: (lat: number, lon: number) => void;
   onViewportChange: (bbox: BBoxRequest) => void;
+  landcoverMode?: boolean;
+  heatmapMode?: boolean;
 }
 
-export default function MapView({ mode, igniteMode, gridCenter, onGridCenterChange, liveFires, globalFires, flyToFire, onFlyDone, userLocation, onSelectFireLocation, onViewportChange }: Props) {
+const FUEL_RISK_COLORS: Record<number, string> = {
+  0: '#1a9850',
+  1: '#a6d96a',
+  2: '#3288bd',
+  3: '#fdae61',
+  4: '#f46d43',
+  5: '#d73027',
+};
+
+const LANDCOVER_COLORS: Record<string, string> = {
+  forest: '#2d5a27',
+  grassland: '#a4b843',
+  water: '#3b82f6',
+  barren: '#6b7280',
+  urban: '#92400e',
+  shrubland: '#d4a373',
+  agriculture: '#f0e68c',
+  wetland: '#5f9ea0',
+  snow_ice: '#ffffff',
+};
+
+function MapView({ mode, igniteMode, gridCenter, onGridCenterChange, liveFires, globalFires, flyToFire, onFlyDone, userLocation, onSelectFireLocation, onViewportChange, landcoverMode, heatmapMode }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<L.ImageOverlay | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const windParticlesRef = useRef<{ x: number; y: number; speed: number; spawnTime: number; lifetime: number }[]>([]);
   const rafRef = useRef<number>(0);
+  const gridCounterRef = useRef(0);
   const perimeterLayerRef = useRef<L.GeoJSON | null>(null);
   const gridSnapshotRef = useRef<ImageData | null>(null);
   const selectionRectRef = useRef<L.Rectangle | null>(null);
@@ -147,7 +172,13 @@ export default function MapView({ mode, igniteMode, gridCenter, onGridCenterChan
   const weatherRef = useRef(weather);
   weatherRef.current = weather;
   const lastOverlayUpdateRef = useRef(0);
-const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() => {});
+  const landcoverCacheRef = useRef<Map<string, any>>(new Map());
+  const landcoverGridRef = useRef<number[][] | null>(null);
+  const landcoverClassesRef = useRef<string[][] | null>(null);
+  const landcoverSourceRef = useRef<string>('');
+  const heatmapModeRef = useRef(false);
+  heatmapModeRef.current = heatmapMode ?? false;
+  const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() => {});
 
   const updatePerimeter = useCallback(() => {
     const map = mapRef.current;
@@ -183,33 +214,81 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
 
     ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
+    // Semi-transparent dark background so grid stands out against satellite
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+    const lcGrid = landcoverGridRef.current;
+    const lcClasses = landcoverClassesRef.current;
+    const isHeatmap = heatmapModeRef.current;
+    let drawnCells = 0;
+
     for (let row = 0; row < GRID_SIZE; row++) {
       for (let col = 0; col < GRID_SIZE; col++) {
         let color = 'rgba(255,255,255,0.04)';
 
-        const fuelType = fuelMap[row]?.[col] as FuelType | undefined;
-        if (fuelType !== undefined) {
-          color = hexToRgba(FUEL_COLORS[fuelType], 0.45);
+        if (isHeatmap) {
+          const ft = fuelMap[row]?.[col] as number | undefined;
+          if (ft !== undefined) color = hexToRgba(FUEL_RISK_COLORS[ft] || '#888', 0.7);
+        } else if (lcGrid && lcClasses) {
+          const cls = lcClasses[row]?.[col];
+          const lcColor = cls ? LANDCOVER_COLORS[cls] : undefined;
+          if (lcColor) color = hexToRgba(lcColor, 0.7);
+        } else {
+          const fuelType = fuelMap[row]?.[col] as number | undefined;
+          if (fuelType !== undefined) color = hexToRgba(FUEL_COLORS[fuelType] || '#888', 0.7);
         }
+
+        if (color !== 'rgba(255,255,255,0.04)') drawnCells++;
 
         const cellState = fireMask[row]?.[col] as CellState | undefined;
         if (cellState !== undefined && cellState !== 0) {
           color = cellState === 1 ? '#ff6b35' : '#1a1a1a';
-          if (cellState === 1) {
-            ctx.shadowColor = 'rgba(255,107,53,0.4)';
-            ctx.shadowBlur = 8;
-          }
         }
 
         ctx.fillStyle = color;
         ctx.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
 
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
         ctx.lineWidth = 0.5;
         ctx.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
       }
+    }
+
+    console.log(`drawGridCanvas: ${drawnCells}/${GRID_SIZE * GRID_SIZE} cells drawn, fuelMap length=${fuelMap.length}`);
+    gridSnapshotRef.current = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+    // Glow pass for burning cells (single gradient per cell, cheaper than per-cell shadowBlur)
+    const burning: { col: number; row: number }[] = [];
+    for (let r = 0; r < GRID_SIZE; r++)
+      for (let c = 0; c < GRID_SIZE; c++)
+        if ((fireMask[r]?.[c] as CellState) === 1) burning.push({ col: c, row: r });
+    if (burning.length > 0 && burning.length <= 64) {
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, CELL_SIZE * 2);
+      g.addColorStop(0, 'rgba(255,107,53,0.20)');
+      g.addColorStop(1, 'rgba(255,107,53,0)');
+      for (const b of burning) {
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(b.col * CELL_SIZE + CELL_SIZE / 2, b.row * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE * 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Source labels
+    const lcSource = landcoverSourceRef.current;
+    if (isHeatmap) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(CANVAS_SIZE - 120, 0, 120, 22);
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px monospace';
+      ctx.fillText('Heatmap: fuel risk', CANVAS_SIZE - 114, 15);
+    } else if (lcSource && !isHeatmap) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(0, CANVAS_SIZE - 22, 200, 22);
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px monospace';
+      ctx.fillText(`Landcover: ${lcSource}`, 6, CANVAS_SIZE - 7);
     }
 
     gridSnapshotRef.current = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
@@ -302,13 +381,18 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
     if (snap) {
       ctx.putImageData(snap, 0, 0);
     }
-    drawWindParticlesRef.current(ctx);
+
+    gridCounterRef.current++;
+    if (gridCounterRef.current % 2 === 0) {
+      drawWindParticlesRef.current(ctx);
+    }
 
     const now = performance.now();
     if (now - lastOverlayUpdateRef.current > 66) {
       overlay.setUrl(canvas.toDataURL());
       lastOverlayUpdateRef.current = now;
     }
+    if (gridCounterRef.current % 60 === 0) console.log(`compositeFrame #${gridCounterRef.current}: overlay=${!!overlay} canvas=${!!canvas}`);
   }, []);
 
   useEffect(() => {
@@ -332,6 +416,37 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
     drawGridCanvas();
     updatePerimeter();
   }, [drawGridCanvas, updatePerimeter]);
+
+  // Landcover fetch with caching
+  useEffect(() => {
+    if (!landcoverMode || !state.landcoverEnabled) {
+      landcoverGridRef.current = null;
+      landcoverClassesRef.current = null;
+      landcoverSourceRef.current = '';
+      drawGridCanvas();
+      return;
+    }
+    let cancelled = false;
+    const [lat, lon] = gridCenter;
+    const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    const cached = landcoverCacheRef.current.get(key);
+    if (cached) {
+      landcoverGridRef.current = cached.landcover.length > 0 ? cached.landcover : cached.fuel_map;
+      landcoverClassesRef.current = cached.classes;
+      landcoverSourceRef.current = cached.source;
+      drawGridCanvas();
+    } else {
+      fetchLandcover(lat, lon).then((data) => {
+        if (cancelled) return;
+        landcoverCacheRef.current.set(key, data);
+        landcoverGridRef.current = data.landcover.length > 0 ? data.landcover : data.fuel_map;
+        landcoverClassesRef.current = data.classes;
+        landcoverSourceRef.current = data.source;
+        drawGridCanvas();
+      }).catch(() => { if (!cancelled) landcoverSourceRef.current = 'mock'; });
+    }
+    return () => { cancelled = true; };
+  }, [landcoverMode, gridCenter]);
 
   const handleAreaStart = useCallback((e: L.LeafletMouseEvent, map: L.Map) => {
     dragStartRef.current = e.latlng;
@@ -627,17 +742,24 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
 
     if (igniteMode === 'point') {
       map.dragging.enable();
-      const clickHandler = (e: L.LeafletMouseEvent) => {
+      const igniteAt = (latlng: L.LatLng) => {
         const gridBounds = boundsRef.current;
-        if (!gridBounds.contains(e.latlng)) return;
+        if (!gridBounds.contains(latlng)) return;
         const toGrid = latLngToGridRef.current;
-        const [x, y] = toGrid(e.latlng);
-        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
-          doIgnite(x, y);
-        }
+        const [x, y] = toGrid(latlng);
+        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) doIgnite(x, y);
+      };
+      const clickHandler = (e: L.LeafletMouseEvent) => igniteAt(e.latlng);
+      const dblClickHandler = (e: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(e);
+        igniteAt(e.latlng);
       };
       map.on('click', clickHandler);
-      return () => { map.off('click', clickHandler); };
+      map.on('dblclick', dblClickHandler);
+      return () => {
+        map.off('click', clickHandler);
+        map.off('dblclick', dblClickHandler);
+      };
     } else if (igniteMode === 'area') {
       map.dragging.disable();
       const down = (e: L.LeafletMouseEvent) => {
@@ -831,3 +953,5 @@ function hexToRgba(hex: string, alpha: number): string {
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${alpha})`;
 }
+
+export default memo(MapView);

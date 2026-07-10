@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, RotateCcw, MousePointer2, Square, Move, Flame, Crosshair, Globe, X } from 'lucide-react';
+import { Play, RotateCcw, MousePointer2, Square, Move, Flame, Crosshair, Globe, X, Crop } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import MapView from '../components/MapView';
 import ControlPanel from '../components/ControlPanel';
@@ -11,8 +11,8 @@ import TimeScrubber from '../components/TimeScrubber';
 import ScenarioPanel from '../components/ScenarioPanel';
 import InfoTooltip from '../components/InfoTooltip';
 import { useSimulation } from '../context/SimulationContext';
-import type { LiveFire, FirmsFire, BBoxRequest } from '../api/types';
-import { getLiveFires, getGlobalFires } from '../api/endpoints';
+import type { LiveFire, FirmsFire, BBoxRequest, EvacuationZonesResponse } from '../api/types';
+import { getLiveFires, getGlobalFires, fetchEvacuationZones } from '../api/endpoints';
 import LiveFiresPanel from '../components/LiveFiresPanel';
 
 const TICK_INTERVAL = 2000;
@@ -45,6 +45,10 @@ export default function DashboardPage() {
   const [globalFires, setGlobalFires] = useState<FirmsFire[]>([]);
   const [flyToFire, setFlyToFire] = useState<[number, number] | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [landcoverMode, setLandcoverMode] = useState(false);
+  const [heatmapMode, setHeatmapMode] = useState(false);
+  const [evacuationZones, setEvacuationZones] = useState<EvacuationZonesResponse | null>(null);
+  const [showEvacuation, setShowEvacuation] = useState(false);
   const onFlyDone = useCallback(() => setFlyToFire(null), []);
   const [worldViewport, setWorldViewport] = useState<BBoxRequest>({ west: -180, south: -90, east: 180, north: 90 });
   const worldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -111,6 +115,31 @@ export default function DashboardPage() {
   useEffect(() => {
     doFetchWeather(gridCenter[0], gridCenter[1]);
   }, [gridCenter, doFetchWeather]);
+
+  useEffect(() => {
+    if (!showEvacuation || mapMode !== 'simulation') { setEvacuationZones(null); return; }
+    const fetch = async () => {
+      try { setEvacuationZones(await fetchEvacuationZones()); } catch {}
+    };
+    fetch();
+    const id = setInterval(fetch, 5000);
+    return () => clearInterval(id);
+  }, [showEvacuation, mapMode]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      switch (e.key.toLowerCase()) {
+        case 'l': if (mapMode === 'simulation') { setLandcoverMode(v => !v); setHeatmapMode(false); } break;
+        case 'h': if (mapMode === 'simulation') { setHeatmapMode(v => !v); setLandcoverMode(false); } break;
+        case 'e': if (mapMode === 'simulation') setShowEvacuation(v => !v); break;
+        case 'r': doReset(); break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [mapMode, doReset]);
 
   return (
     <div className="dashboard-page">
@@ -187,6 +216,34 @@ export default function DashboardPage() {
                 </button>
               </>
             )}
+            {mapMode === 'simulation' && (
+              <>
+                <button
+                  className={`btn map-control-btn${landcoverMode ? ' active' : ''}`}
+                  onClick={() => { setLandcoverMode(v => !v); if (!landcoverMode) setHeatmapMode(false); }}
+                  title="Show landcover overlay [L]"
+                  style={landcoverMode ? { background: 'var(--accent-blue)', color: 'white' } : undefined}
+                >
+                  <Crop size={14} /> Land
+                </button>
+                <button
+                  className={`btn map-control-btn${heatmapMode ? ' active' : ''}`}
+                  onClick={() => { setHeatmapMode(v => !v); if (!heatmapMode) setLandcoverMode(false); }}
+                  title="Show fuel risk heatmap [H]"
+                  style={heatmapMode ? { background: 'var(--accent-fire)', color: 'white' } : undefined}
+                >
+                  <Flame size={14} /> Risk
+                </button>
+                <button
+                  className={`btn map-control-btn${showEvacuation ? ' active' : ''}`}
+                  onClick={() => setShowEvacuation(v => !v)}
+                  title="Show evacuation zones [E]"
+                  style={showEvacuation ? { background: 'var(--accent-red)', color: 'white' } : undefined}
+                >
+                  <Crosshair size={14} /> Evac
+                </button>
+              </>
+            )}
             <button
               className={`btn map-control-btn${showLiveFires ? ' active' : ''}`}
               onClick={() => setShowLiveFires((v) => !v)}
@@ -241,11 +298,33 @@ export default function DashboardPage() {
             userLocation={userLocation}
             onSelectFireLocation={handleSelectFireLocation}
             onViewportChange={handleViewportChange}
+            landcoverMode={landcoverMode}
+            heatmapMode={heatmapMode}
           />
           {mapMode === 'simulation' && <Legend />}
         </div>
         {mapMode === 'simulation' && showLiveFires && liveFires.length > 0 && (
           <LiveFiresPanel fires={liveFires} onSelectFire={(lat, lng) => setFlyToFire([lat, lng])} />
+        )}
+        {showEvacuation && evacuationZones && (
+          <div className="evacuation-panel">
+            <div className="evacuation-panel-header">
+              <span>Evacuation Zones</span>
+              <button className="btn btn-sm" onClick={() => setShowEvacuation(false)}><X size={12} /></button>
+            </div>
+            {evacuationZones.towns_affected.length === 0 ? (
+              <p className="evacuation-panel-safe">No towns currently in danger.</p>
+            ) : (
+              <ul className="evacuation-panel-list">
+                {evacuationZones.zones.map((z, i) => (
+                  <li key={i} className="evacuation-panel-item">
+                    <span className="evacuation-panel-town">{z.name}</span>
+                    <span className="evacuation-panel-coords">({z.lat.toFixed(2)}, {z.lon.toFixed(2)})</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
         {mapMode === 'world' && (
           <div className="world-mode-hint">

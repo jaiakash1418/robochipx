@@ -2675,3 +2675,66 @@
   border: none !important;
   filter: drop-shadow(0 0 4px rgba(255, 107, 53, 0.6));
 }
+
+/* ============ EVACUATION PANEL ============ */
+
+.evacuation-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 260px;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-red);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.evacuation-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(220, 38, 38, 0.15);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent-fire);
+}
+
+.evacuation-panel-safe {
+  padding: 16px 12px;
+  font-size: 0.75rem;
+  color: var(--accent-green);
+  text-align: center;
+}
+
+.evacuation-panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.evacuation-panel-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.evacuation-panel-item:last-child {
+  border-bottom: none;
+}
+
+.evacuation-panel-town {
+  font-weight: 600;
+}
+
+.evacuation-panel-coords {
+  color: var(--text-tertiary);
+  font-family: monospace;
+  font-size: 0.65rem;
+}

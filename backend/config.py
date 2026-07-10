@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.2"
 
     firms_api_key: str = ""
+    hf_token: str = ""
+
+    landcover_model_dir: str = os.path.join(_BACKEND_DIR, "models", "landcover_onnx")
 
     open_topography_url: str = "https://portal.opentopography.org/API/globaldem"
     open_topography_api_key: str = ""
