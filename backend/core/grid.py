@@ -464,6 +464,51 @@ class Grid:
                 return True
         return False
 
+    def ignite_random_shape(self, cx: int, cy: int, num_cells: int = 15) -> int:
+        """Ignite an irregular random-shaped cluster around (cx, cy)."""
+        import random as _random
+        rng = _random.Random()
+        rng.seed(cx * 1000 + cy)
+        dirs = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)]
+
+        def is_ignitable(gx: int, gy: int) -> bool:
+            if not (0 <= gx < self.size and 0 <= gy < self.size):
+                return False
+            if self.fire_mask[gy, gx] != CELL_STATES["unburned"]:
+                return False
+            if self.fuel_map[gy, gx] == FUEL_TYPES["water"]:
+                return False
+            if self.fuel_map[gy, gx] == FUEL_TYPES["firebreak"]:
+                return False
+            return True
+
+        if not is_ignitable(cx, cy):
+            return 0
+
+        self.fire_mask[cy, cx] = CELL_STATES["burning"]
+        burning_cells: list[tuple[int, int]] = [(cx, cy)]
+        ignited = 1
+
+        for _ in range(num_cells):
+            rng.shuffle(burning_cells)
+            found = False
+            for bx, by in burning_cells:
+                rng.shuffle(dirs)
+                for dx, dy in dirs:
+                    nx, ny = bx + dx, by + dy
+                    if is_ignitable(nx, ny):
+                        self.fire_mask[ny, nx] = CELL_STATES["burning"]
+                        burning_cells.append((nx, ny))
+                        ignited += 1
+                        found = True
+                        break
+                if found:
+                    break
+            if not found:
+                break
+
+        return ignited
+
     def clear(self, x: int, y: int) -> bool:
         if 0 <= x < self.size and 0 <= y < self.size:
             self.fire_mask[y, x] = CELL_STATES["unburned"]

@@ -9,6 +9,9 @@ from api.schemas import (
     LLMQueryResponse,
     BatchIgniteRequest,
     ZoneRequest,
+    EvacuationRouteRequest,
+    EvacuationRouteResponse,
+    DispatcherStatusResponse,
 )
 from services.simulation import simulation
 from services.weather import weather_service
@@ -16,6 +19,8 @@ from services.firms import firms_service
 from services.rag import build_rag_context
 from core.alerts import check_alerts
 from core.grid import CELL_STATES
+from core.pathfinding import find_safest_route
+from core.dispatcher import compute_dispatches
 from config import settings
 
 router = APIRouter(prefix="/api")
@@ -33,11 +38,11 @@ async def health_check():
 
 @router.post("/simulation/ignite")
 async def ignite(req: IgniteRequest):
-    success = simulation.ignite(req.x, req.y)
-    if not success:
-        raise HTTPException(400, "Invalid cell coordinates or cell already burning")
+    ignited = simulation.grid.ignite_random_shape(req.x, req.y)
+    if ignited == 0:
+        raise HTTPException(400, "Cannot ignite at that location")
     simulation.running = True
-    return {"success": True, "message": f"Ignited at ({req.x}, {req.y})"}
+    return {"success": True, "ignited": ignited, "message": f"Ignited {ignited} cells at ({req.x}, {req.y})"}
 
 
 @router.post("/simulation/ignite-area")
@@ -205,6 +210,47 @@ async def get_alerts():
         simulation.grid.size,
     )
     return {"alerts": alerts}
+
+
+@router.post("/evacuation/route", response_model=EvacuationRouteResponse)
+async def evacuation_route(req: EvacuationRouteRequest):
+    grid = simulation.grid
+    path = find_safest_route(
+        start_x=req.start_x,
+        start_y=req.start_y,
+        goal_x=req.goal_x,
+        goal_y=req.goal_y,
+        fuel_map=grid.fuel_map.tolist(),
+        fire_mask=grid.fire_mask.tolist(),
+        size=grid.size,
+    )
+    return {"path": path, "found": len(path) > 0}
+
+
+@router.get("/dispatcher/status", response_model=DispatcherStatusResponse)
+async def dispatcher_status():
+    grid = simulation.grid
+    fire_mask = grid.fire_mask.tolist()
+    active_fires = int((grid.fire_mask == 1).sum())
+
+    weather = await weather_service.get_current()
+    wind_speed = weather.get("wind_speed", 10.0) if isinstance(weather, dict) else 10.0
+    wind_dir = weather.get("wind_direction", 0.0) if isinstance(weather, dict) else 0.0
+
+    dispatches = compute_dispatches(
+        fuel_map=grid.fuel_map.tolist(),
+        fire_mask=fire_mask,
+        towns=grid.towns,
+        size=grid.size,
+        wind_speed=wind_speed,
+        wind_dir_deg=wind_dir,
+    )
+
+    return {
+        "dispatches": dispatches,
+        "active_fires": active_fires,
+        "total_dispatched": len(dispatches),
+    }
 
 
 @router.get("/model/evaluation")

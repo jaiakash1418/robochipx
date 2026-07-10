@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSimulation } from '../context/SimulationContext';
@@ -102,16 +102,20 @@ function getFirePerimeter(fireMask: CellState[][], bounds: L.LatLngBounds): Feat
 }
 
 interface Props {
-  igniteMode: 'point' | 'area' | 'move';
+  igniteMode: 'point' | 'area' | 'move' | 'normal';
   gridCenter: [number, number];
   onGridCenterChange: (c: [number, number]) => void;
   liveFires: LiveFire[];
   flyToFire: [number, number] | null;
   onFlyDone: () => void;
   userLocation: [number, number] | null;
+  evacMode?: boolean;
+  onSafeZoneClick?: (gridX: number, gridY: number) => void;
+  evacPath?: { x: number; y: number }[];
+  safeZone?: { x: number; y: number } | null;
 }
 
-export default function MapView({ igniteMode, gridCenter, onGridCenterChange, liveFires, flyToFire, onFlyDone, userLocation }: Props) {
+export default function MapView({ igniteMode, gridCenter, onGridCenterChange, liveFires, flyToFire, onFlyDone, userLocation, evacMode, onSafeZoneClick, evacPath, safeZone }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<L.ImageOverlay | null>(null);
@@ -282,6 +286,11 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
     }
   };
 
+  const evacPathRef = useRef(evacPath);
+  const safeZoneRef = useRef(safeZone);
+  evacPathRef.current = evacPath;
+  safeZoneRef.current = safeZone;
+
   const compositeFrame = useCallback(() => {
     const canvas = canvasRef.current;
     const overlay = overlayRef.current;
@@ -293,6 +302,63 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
     if (snap) {
       ctx.putImageData(snap, 0, 0);
     }
+
+    const path = evacPathRef.current;
+    if (path && path.length > 0) {
+      ctx.beginPath();
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 4;
+      ctx.shadowColor = 'rgba(0,229,255,0.6)';
+      ctx.shadowBlur = 12;
+      const half = CELL_SIZE / 2;
+      ctx.moveTo(path[0].x * CELL_SIZE + half, path[0].y * CELL_SIZE + half);
+      for (let i = 1; i < path.length; i++) {
+        ctx.lineTo(path[i].x * CELL_SIZE + half, path[i].y * CELL_SIZE + half);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      for (let i = 0; i < path.length; i += Math.max(1, Math.floor(path.length / 8))) {
+        const cx = path[i].x * CELL_SIZE + half;
+        const cy = path[i].y * CELL_SIZE + half;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#00e5ff';
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      ctx.arc(path[0].x * CELL_SIZE + half, path[0].y * CELL_SIZE + half, 5, 0, Math.PI * 2);
+      ctx.strokeStyle = '#00ff88';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(path[path.length - 1].x * CELL_SIZE + half, path[path.length - 1].y * CELL_SIZE + half, 6, 0, Math.PI * 2);
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 3;
+      ctx.fillStyle = 'rgba(0,229,255,0.3)';
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    const sz = safeZoneRef.current;
+    if (sz) {
+      const cx = sz.x * CELL_SIZE + CELL_SIZE / 2;
+      const cy = sz.y * CELL_SIZE + CELL_SIZE / 2;
+      ctx.strokeStyle = '#00ff88';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = 'rgba(0,255,136,0.5)';
+      ctx.shadowBlur = 8;
+      ctx.strokeRect(sz.x * CELL_SIZE + 2, sz.y * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = '#00ff88';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('SAFE', cx, cy);
+      ctx.shadowBlur = 0;
+    }
+
     drawWindParticlesRef.current(ctx);
 
     const now = performance.now();
@@ -510,6 +576,8 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
     };
   }, [userLocation]);
 
+  
+
   // Fly to a fire
   useEffect(() => {
     const map = mapRef.current;
@@ -522,6 +590,31 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+
+    if (evacMode) {
+      map.dragging.enable();
+      map.getContainer().style.cursor = 'crosshair';
+      const clickHandler = (e: L.LeafletMouseEvent) => {
+        const gridBounds = boundsRef.current;
+        if (!gridBounds.contains(e.latlng)) return;
+        const toGrid = latLngToGridRef.current;
+        const [x, y] = toGrid(e.latlng);
+        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+          onSafeZoneClick?.(x, y);
+        }
+      };
+      map.on('click', clickHandler);
+      return () => {
+        map.off('click', clickHandler);
+        map.getContainer().style.cursor = '';
+      };
+    }
+
+    if (igniteMode === 'normal') {
+      map.dragging.enable();
+      map.getContainer().style.cursor = '';
+      return;
+    }
 
     if (igniteMode === 'point') {
       map.dragging.enable();
@@ -578,7 +671,7 @@ const drawWindParticlesRef = useRef<(ctx: CanvasRenderingContext2D) => void>(() 
         map.off('click', clickHandler);
       };
     }
-  }, [igniteMode, doIgnite, doIgniteArea, handleAreaStart, handleAreaMove, handleAreaEnd, handleMoveClick]);
+  }, [igniteMode, evacMode, onSafeZoneClick, doIgnite, doIgniteArea, handleAreaStart, handleAreaMove, handleAreaEnd, handleMoveClick]);
 
   useEffect(() => {
     const map = mapRef.current;

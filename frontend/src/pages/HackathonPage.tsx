@@ -211,6 +211,154 @@ export default function HackathonPage() {
         RAG context includes fuel composition percentages, weather analysis (wind direction named + speed classification), active town alerts with severity, user location distance to fire centroid, and simulation step status.
       </div>
 
+      <div className="hackathon-section">
+        <div className="hackathon-section-title">
+          <span>🏗️</span>
+          <span>Architecture & Workflow</span>
+          <span className="hackathon-section-badge">end-to-end flow</span>
+        </div>
+
+        <div className="workflow">
+          <div className="workflow-stack">
+            <div className="wf-layer wf-layer-frontend">
+              <div className="wf-layer-head">
+                <span className="wf-layer-icon">🖥️</span>
+                <span className="wf-layer-name">Frontend</span>
+                <span className="wf-layer-stack">React · Vite · TypeScript</span>
+              </div>
+              <div className="wf-layer-body">
+                <div className="wf-node"><span className="wf-ico">🧭</span><span><strong>Router</strong> — 9 pages, shared Layout, AnimatePresence page transitions</span></div>
+                <div className="wf-node"><span className="wf-ico">💾</span><span><strong>SimulationContext</strong> — global state: fire mask, running, alerts, stats, weather</span></div>
+                <div className="wf-node"><span className="wf-ico">📊</span><span><strong>Dashboard</strong> — MapView canvas + 6 sidebar panels + floating LLM chat</span></div>
+                <div className="wf-node"><span className="wf-ico">🔄</span><span><strong>Auto intervals</strong> — tick 2s · evac route 3s · dispatcher 4s</span></div>
+                <div className="wf-node"><span className="wf-ico">🖼️</span><span><strong>Canvas</strong> — grid cells, fire/fuel colors, town markers, cyan evac route, SAFE label</span></div>
+              </div>
+            </div>
+
+            <div className="wf-connector" />
+
+            <div className="wf-layer wf-layer-transport">
+              <div className="wf-layer-head">
+                <span className="wf-layer-icon">🌐</span>
+                <span className="wf-layer-name">Transport</span>
+                <span className="wf-layer-stack">REST · WebSocket</span>
+              </div>
+              <div className="wf-layer-body">
+                <div className="wf-node"><span className="wf-ico">📡</span><span><strong>REST API</strong> — 18 endpoints at <code>/api/*</code>: simulation, weather, FIRMS, evac, dispatcher, LLM, eval</span></div>
+                <div className="wf-node"><span className="wf-ico">🔌</span><span><strong>WebSocket</strong> — <code>/ws</code> pushes real-time state to all dashboard clients</span></div>
+                <div className="wf-node"><span className="wf-ico">🔓</span><span><strong>CORS</strong> — open policy, configurable via <code>settings.cors_origins</code></span></div>
+              </div>
+            </div>
+
+            <div className="wf-connector" />
+
+            <div className="wf-layer wf-layer-backend">
+              <div className="wf-layer-head">
+                <span className="wf-layer-icon">⚙️</span>
+                <span className="wf-layer-name">Backend</span>
+                <span className="wf-layer-stack">FastAPI · Python</span>
+              </div>
+              <div className="wf-layer-body">
+                <div className="wf-node"><span className="wf-ico">🚀</span><span><strong>main.py</strong> — FastAPI app, CORS, router include, WS handler, lifespan fuel-map load</span></div>
+                <div className="wf-node"><span className="wf-ico">📋</span><span><strong>routes.py</strong> — 18 endpoints under <code>/api</code></span></div>
+                <div className="wf-node"><span className="wf-ico">🔥</span><span><strong>simulation.py</strong> — tick(): kernel spread → ML adjust → burn transition → alerts</span></div>
+                <div className="wf-node"><span className="wf-ico">🌤️</span><span><strong>weather.py</strong> — async Open-Meteo fetcher, caching, demo fallback, manual override</span></div>
+                <div className="wf-node"><span className="wf-ico">🛰️</span><span><strong>firms.py</strong> — NASA FIRMS client, nearest-fires query within radius</span></div>
+                <div className="wf-node"><span className="wf-ico">📐</span><span><strong>grid.py</strong> — 64×64 fuel/fire/towns, random-shape ignition cluster (~16 cells)</span></div>
+                <div className="wf-node"><span className="wf-ico">📍</span><span><strong>pathfinding.py</strong> — A* 8-dir, road-weighted, fire-buffer zone, dynamic fuel cost</span></div>
+                <div className="wf-node"><span className="wf-ico">🚒</span><span><strong>dispatcher.py</strong> — priority queue: risk × critical_value × wind_alignment</span></div>
+                <div className="wf-node"><span className="wf-ico">🔔</span><span><strong>alerts.py</strong> — BFS from fire perimeter, flags towns within danger radius</span></div>
+                <div className="wf-node"><span className="wf-ico">🧠</span><span><strong>rag.py + llm</strong> — RAG context builder; fallback: Ollama ⇒ OpenAI ⇒ template</span></div>
+              </div>
+            </div>
+
+            <div className="wf-connector" />
+
+            <div className="wf-layer wf-layer-external">
+              <div className="wf-layer-head">
+                <span className="wf-layer-icon">☁️</span>
+                <span className="wf-layer-name">External Services</span>
+              </div>
+              <div className="wf-layer-body wf-external-row">
+                <div className="wf-ext-card"><span className="wf-ext-icon">🌤️</span><span className="wf-ext-name">Open-Meteo</span><span className="wf-ext-desc">Live weather data</span></div>
+                <div className="wf-ext-card"><span className="wf-ext-icon">🛰️</span><span className="wf-ext-name">NASA FIRMS</span><span className="wf-ext-desc">Active fire detections</span></div>
+                <div className="wf-ext-card"><span className="wf-ext-icon">🤖</span><span className="wf-ext-name">Ollama</span><span className="wf-ext-desc">Local LLM (optional)</span></div>
+                <div className="wf-ext-card"><span className="wf-ext-icon">☁️</span><span className="wf-ext-name">OpenAI</span><span className="wf-ext-desc">Cloud LLM (optional)</span></div>
+                <div className="wf-ext-card"><span className="wf-ext-icon">🗺️</span><span className="wf-ext-name">OSM</span><span className="wf-ext-desc">Fuel map tiles</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="wf-cycle">
+            <div className="wf-cycle-title">🔄 Simulation Tick Cycle</div>
+            <div className="wf-cycle-steps">
+              <div className="wf-step">
+                <div className="wf-step-marker">1</div>
+                <div className="wf-step-icon">💥</div>
+                <div className="wf-step-body">
+                  <div className="wf-step-name">Ignite</div>
+                  <div className="wf-step-info">Random cluster ~16 cells</div>
+                </div>
+              </div>
+              <div className="wf-step-arr">→</div>
+              <div className="wf-step">
+                <div className="wf-step-marker">2</div>
+                <div className="wf-step-icon">🌊</div>
+                <div className="wf-step-body">
+                  <div className="wf-step-name">Kernel Spread</div>
+                  <div className="wf-step-info">5×5 · wind-stretched · dot-product alignment</div>
+                </div>
+              </div>
+              <div className="wf-step-arr">→</div>
+              <div className="wf-step">
+                <div className="wf-step-marker">3</div>
+                <div className="wf-step-icon">🧠</div>
+                <div className="wf-step-body">
+                  <div className="wf-step-name">ML Adjust</div>
+                  <div className="wf-step-info">FireSenseNet prob. modification</div>
+                </div>
+              </div>
+              <div className="wf-step-arr">→</div>
+              <div className="wf-step">
+                <div className="wf-step-marker">4</div>
+                <div className="wf-step-icon">🔥</div>
+                <div className="wf-step-body">
+                  <div className="wf-step-name">Burn Transition</div>
+                  <div className="wf-step-info">burning → burned</div>
+                </div>
+              </div>
+              <div className="wf-step-arr">→</div>
+              <div className="wf-step">
+                <div className="wf-step-marker">5</div>
+                <div className="wf-step-icon">🔔</div>
+                <div className="wf-step-body">
+                  <div className="wf-step-name">Alerts</div>
+                  <div className="wf-step-info">BFS perimeter → flag towns</div>
+                </div>
+              </div>
+              <div className="wf-step-arr">→</div>
+              <div className="wf-step">
+                <div className="wf-step-marker">6</div>
+                <div className="wf-step-icon">🚗</div>
+                <div className="wf-step-body">
+                  <div className="wf-step-name">Evacuation</div>
+                  <div className="wf-step-info">A* safest-route recalc</div>
+                </div>
+              </div>
+              <div className="wf-step-arr">→</div>
+              <div className="wf-step">
+                <div className="wf-step-marker">7</div>
+                <div className="wf-step-icon">🚒</div>
+                <div className="wf-step-body">
+                  <div className="wf-step-name">Dispatch</div>
+                  <div className="wf-step-info">Priority queue → order resources</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {sections.map((section, si) => (
         <div key={si} className="hackathon-section">
           <div className="hackathon-section-title">

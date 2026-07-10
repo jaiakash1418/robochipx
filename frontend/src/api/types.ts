@@ -163,3 +163,35 @@ export interface FiresResponse {
   fires: LiveFire[];
   count: number;
 }
+
+export interface DispatchOrder {
+  unit: string;
+  priority: number;
+  risk_score: number;
+  grid_x: number;
+  grid_y: number;
+  target: string;
+  infrastructure_type: string;
+  arrival_estimate_ticks: number;
+  risk_pct: number;
+  critical_value: number;
+  action: string;
+}
+
+export interface DispatcherStatusResponse {
+  dispatches: DispatchOrder[];
+  active_fires: number;
+  total_dispatched: number;
+}
+
+export interface EvacuationRouteRequest {
+  start_x: number;
+  start_y: number;
+  goal_x: number;
+  goal_y: number;
+}
+
+export interface EvacuationRouteResponse {
+  path: { x: number; y: number }[];
+  found: boolean;
+}

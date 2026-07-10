@@ -14,6 +14,10 @@ import type {
   GridRect,
   DemoRunResponse,
   FiresResponse,
+  EvacuationRouteRequest,
+  EvacuationRouteResponse,
+  DispatcherStatusResponse,
+  DispatchOrder,
 } from './types';
 
 let useMock: boolean | null = null;
@@ -166,3 +170,131 @@ export const queryLLM = async (data: LLMQueryRequest) => {
   }
   return apiClient.post<LLMQueryResponse>('/llm/query', data).then((r) => r.data);
 };
+
+export const getEvacuationRoute = async (data: EvacuationRouteRequest) => {
+  if (await isUsingMock()) {
+    const state = mockEngine.getState();
+    const fuel = state.fuel_map;
+    const fire = state.fire_mask;
+    const path = mockFindSafestRoute(data.start_x, data.start_y, data.goal_x, data.goal_y, fuel, fire);
+    return { path, found: path.length > 0 } as EvacuationRouteResponse;
+  }
+  return apiClient.post<EvacuationRouteResponse>('/evacuation/route', data).then((r) => r.data);
+};
+
+function mockFindSafestRoute(
+  startX: number, startY: number, goalX: number, goalY: number,
+  fuelMap: number[][], fireMask: number[][],
+): { x: number; y: number }[] {
+  const size = fuelMap.length;
+  const impassable = new Set([2, 5]);
+  const key = (x: number, y: number) => `${x},${y}`;
+
+  function isSafe(x: number, y: number): boolean {
+    if (x < 0 || x >= size || y < 0 || y >= size) return false;
+    if (impassable.has(fuelMap[y][x])) return false;
+    if (fireMask[y][x] !== 0) return false;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && nx < size && ny >= 0 && ny < size && fireMask[ny][nx] !== 0) return false;
+      }
+    }
+    return true;
+  }
+
+  const openSet = [{ x: startX, y: startY, f: 0, g: 0 }];
+  const cameFrom = new Map<string, { x: number; y: number } | null>();
+  const gScore = new Map<string, number>();
+  cameFrom.set(key(startX, startY), null);
+  gScore.set(key(startX, startY), 0);
+
+  while (openSet.length > 0) {
+    openSet.sort((a, b) => a.f - b.f);
+    const current = openSet.shift()!;
+    if (current.x === goalX && current.y === goalY) {
+      const path: { x: number; y: number }[] = [];
+      let c = { x: goalX, y: goalY };
+      while (c) {
+        path.push(c);
+        c = cameFrom.get(key(c.x, c.y)) || undefined!;
+        if (!c) break;
+      }
+      path.reverse();
+      return path;
+    }
+
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]) {
+      const nx = current.x + dx, ny = current.y + dy;
+      if (!isSafe(nx, ny)) continue;
+      const cost = fuelMap[ny][nx] === 4 ? 0.5 : fuelMap[ny][nx] === 3 ? 1 : 1.5;
+      const tentG = (gScore.get(key(current.x, current.y)) ?? 0) + cost;
+      if (!gScore.has(key(nx, ny)) || tentG < gScore.get(key(nx, ny))!) {
+        gScore.set(key(nx, ny), tentG);
+        const h = Math.sqrt((nx - goalX) ** 2 + (ny - goalY) ** 2);
+        openSet.push({ x: nx, y: ny, f: tentG + h, g: tentG });
+        cameFrom.set(key(nx, ny), { x: current.x, y: current.y });
+      }
+    }
+  }
+  return [];
+}
+
+export const getDispatcherStatus = async () => {
+  if (await isUsingMock()) {
+    return mockGetDispatcherStatus();
+  }
+  return apiClient.get<DispatcherStatusResponse>('/dispatcher/status').then((r) => r.data);
+};
+
+function mockComputeDispatches(): DispatchOrder[] {
+  const state = mockEngine.getState();
+  const fire = state.fire_mask;
+  const fuel = state.fuel_map;
+  const towns = state.towns;
+  const size = fuel.length;
+
+  function fireRisk(x: number, y: number): number {
+    const burning: [number, number][] = [];
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (fire[r][c] === 1) burning.push([c, r]);
+      }
+    }
+    if (burning.length === 0) return 0;
+    const minDist = Math.min(...burning.map(([bx, by]) => Math.sqrt((x - bx) ** 2 + (y - by) ** 2)));
+    const distFactor = Math.max(0, 1 - minDist / 25);
+    const flam = [1.0, 1.3, 0.0, 0.8, 0.3, 0.1];
+    return Math.min(1, distFactor * (flam[fuel[y]?.[x] ?? 1] ?? 0.5));
+  }
+
+  const items: { score: number; risk: number; value: number; label: string; cx: number; cy: number }[] = [];
+  for (const t of towns) {
+    const risk = fireRisk(t.x, t.y);
+    const val = 5;
+    if (risk > 0) items.push({ score: risk * val, risk, value: val, label: t.name, cx: t.x, cy: t.y });
+  }
+
+  items.sort((a, b) => b.score - a.score);
+  const units = ['Engine 1', 'Engine 2', 'Engine 3', 'Truck 4', 'Truck 5', 'Helicopter 6'];
+  return items.slice(0, 12).map((item, i) => ({
+    unit: units[i % units.length],
+    priority: i + 1,
+    risk_score: parseFloat(item.score.toFixed(2)),
+    grid_x: item.cx,
+    grid_y: item.cy,
+    target: item.label,
+    infrastructure_type: 'town',
+    arrival_estimate_ticks: 3,
+    risk_pct: Math.round(item.risk * 100),
+    critical_value: item.value,
+    action: `Deploy ${units[i % units.length]} to Grid (${item.cx}, ${item.cy}) - ${item.label} at Risk in ~6s`,
+  }));
+}
+
+function mockGetDispatcherStatus(): DispatcherStatusResponse {
+  const state = mockEngine.getState();
+  const active = state.stats.burning;
+  const dispatches = mockComputeDispatches();
+  return { dispatches, active_fires: active, total_dispatched: dispatches.length };
+}

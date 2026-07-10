@@ -75,3 +75,21 @@ class ZoneRequest(BaseModel):
     y1: int | None = None
     x2: int | None = None
     y2: int | None = None
+
+
+class EvacuationRouteRequest(BaseModel):
+    start_x: int
+    start_y: int
+    goal_x: int
+    goal_y: int
+
+
+class EvacuationRouteResponse(BaseModel):
+    path: list[dict]
+    found: bool
+
+
+class DispatcherStatusResponse(BaseModel):
+    dispatches: list[dict]
+    active_fires: int
+    total_dispatched: int

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, RotateCcw, MousePointer2, Square, Move, Flame, Crosshair, X } from 'lucide-react';
+import { Play, RotateCcw, MousePointer2, Square, Move, Flame, Crosshair, X, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import MapView from '../components/MapView';
 import ControlPanel from '../components/ControlPanel';
@@ -12,8 +12,10 @@ import ScenarioPanel from '../components/ScenarioPanel';
 import InfoTooltip from '../components/InfoTooltip';
 import { useSimulation } from '../context/SimulationContext';
 import type { LiveFire } from '../api/types';
-import { getLiveFires } from '../api/endpoints';
+import { getLiveFires, getEvacuationRoute } from '../api/endpoints';
 import LiveFiresPanel from '../components/LiveFiresPanel';
+import EvacuationPanel from '../components/EvacuationPanel';
+import DispatcherPanel from '../components/DispatcherPanel';
 
 const TICK_INTERVAL = 2000;
 
@@ -30,7 +32,7 @@ export default function DashboardPage() {
   const { state, doTick, doReset, doFetchWeather, dismissError, setCustomLocation } = useSimulation();
   const { running, loading, error } = state;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [igniteMode, setIgniteMode] = useState<'point' | 'area' | 'move'>('point');
+  const [igniteMode, setIgniteMode] = useState<'point' | 'area' | 'move' | 'normal'>('point');
   const [gridCenter, setGridCenter] = useState<[number, number]>([38, -121.5]);
 
   const handleGridCenterChange = useCallback((center: [number, number]) => {
@@ -44,6 +46,9 @@ export default function DashboardPage() {
   const [flyToFire, setFlyToFire] = useState<[number, number] | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const onFlyDone = useCallback(() => setFlyToFire(null), []);
+  const [evacMode, setEvacMode] = useState(false);
+  const [safeZone, setSafeZone] = useState<{ x: number; y: number } | null>(null);
+  const [evacPath, setEvacPath] = useState<{ x: number; y: number }[]>([]);
 
   useEffect(() => {
     if (!showLiveFires) { setLiveFires([]); return; }
@@ -75,6 +80,21 @@ export default function DashboardPage() {
     };
   }, [running, doTick]);
 
+  const handleSafeZoneClick = useCallback(async (gridX: number, gridY: number) => {
+    setSafeZone({ x: gridX, y: gridY });
+    setEvacMode(false);
+    setIgniteMode('point');
+  }, []);
+
+  const handleEvacRouteFound = useCallback((path: { x: number; y: number }[]) => {
+    setEvacPath(path);
+  }, []);
+
+  const handleSelectSafeZone = useCallback(() => {
+    setEvacMode(true);
+    setIgniteMode('normal');
+  }, []);
+
   useEffect(() => {
     doFetchWeather(gridCenter[0], gridCenter[1]);
   }, [gridCenter, doFetchWeather]);
@@ -99,21 +119,21 @@ export default function DashboardPage() {
             <div className="ignite-mode-toggle">
               <button
                 className={`btn ignite-mode-btn${igniteMode === 'point' ? ' active' : ''}`}
-                onClick={() => setIgniteMode('point')}
+                onClick={() => { setIgniteMode('point'); setEvacMode(false); }}
                 title="Click to ignite single cell"
               >
                 <MousePointer2 size={14} /> Point
               </button>
               <button
                 className={`btn ignite-mode-btn${igniteMode === 'area' ? ' active' : ''}`}
-                onClick={() => setIgniteMode('area')}
+                onClick={() => { setIgniteMode('area'); setEvacMode(false); }}
                 title="Drag to ignite area"
               >
                 <Square size={14} /> Area
               </button>
               <button
                 className={`btn ignite-mode-btn${igniteMode === 'move' ? ' active' : ''}`}
-                onClick={() => setIgniteMode('move')}
+                onClick={() => { setIgniteMode('move'); setEvacMode(false); }}
                 title="Click map to reposition grid"
               >
                 <Move size={14} /> Move
@@ -167,11 +187,10 @@ export default function DashboardPage() {
                     setUserLocation(coords);
                     setFlyToFire(coords);
                   },
-                  () => { /* prefererence denied or unavailable */ },
+                  () => { /* preference denied or unavailable */ },
                   { enableHighAccuracy: false, timeout: 10000 },
                 );
               }}
-              title={userLocation ? 'Clear location' : 'Show my location'}
               style={userLocation ? { background: 'var(--accent-fire)', color: 'white' } : undefined}
             >
               <Crosshair size={14} /> {userLocation ? 'Located' : 'Locate'}
@@ -182,7 +201,25 @@ export default function DashboardPage() {
               </span>
             )}
           </div>
-          <MapView igniteMode={igniteMode} gridCenter={gridCenter} onGridCenterChange={handleGridCenterChange} liveFires={liveFires} flyToFire={flyToFire} onFlyDone={onFlyDone} userLocation={userLocation} />
+          {evacMode && (
+            <div className="evac-mode-banner">
+              <Shield size={14} />
+              <span>Click a grid cell to set it as the safe evacuation zone</span>
+            </div>
+          )}
+          <MapView
+            igniteMode={igniteMode}
+            gridCenter={gridCenter}
+            onGridCenterChange={handleGridCenterChange}
+            liveFires={liveFires}
+            flyToFire={flyToFire}
+            onFlyDone={onFlyDone}
+            userLocation={userLocation}
+            evacMode={evacMode}
+            onSafeZoneClick={handleSafeZoneClick}
+            evacPath={evacPath}
+            safeZone={safeZone}
+          />
           <Legend />
         </div>
         {showLiveFires && liveFires.length > 0 && (
@@ -194,6 +231,13 @@ export default function DashboardPage() {
         <ControlPanel />
         <StatsPanel />
         <AlertPanel />
+        <EvacuationPanel
+          onRouteFound={handleEvacRouteFound}
+          onSelectSafeZone={handleSelectSafeZone}
+          safeZone={safeZone}
+          routePath={evacPath}
+        />
+        <DispatcherPanel />
         <ScenarioPanel />
       </aside>
       <LLMChat />

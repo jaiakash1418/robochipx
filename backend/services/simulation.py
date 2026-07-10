@@ -73,24 +73,27 @@ class SimulationService:
         if not burning.any():
             return
 
-        rad = np.radians(90 - wind_dir)
-        stretch = 1.0 + wind_speed / 30.0
-        cos_a, sin_a = np.cos(rad), np.sin(rad)
+        rad = np.radians(wind_dir)
+        stretch = 1.0 + wind_speed / 15.0
+        downwind_dx = -np.sin(rad)
+        downwind_dy = np.cos(rad)
 
-        kernel_size = 3
+        kernel_size = 5
+        half = kernel_size // 2
         kernel = np.zeros((kernel_size, kernel_size), dtype=np.float32)
-        for dy in range(-1, 2):
-            for dx in range(-1, 2):
+        for dy in range(-half, half + 1):
+            for dx in range(-half, half + 1):
                 if dx == 0 and dy == 0:
-                    kernel[dy + 1, dx + 1] = 1.0
+                    kernel[dy + half, dx + half] = 1.0
                     continue
-                rx = dx * cos_a - dy * sin_a
-                ry = dx * sin_a + dy * cos_a
-                rx /= stretch
-                dist = np.sqrt(rx ** 2 + ry ** 2)
-                kernel[dy + 1, dx + 1] = max(0, 1.0 - dist * 0.6)
+                dist = np.sqrt(dx ** 2 + dy ** 2)
+                val = max(0.0, 1.0 - dist * 0.55)
+                dot = dx * downwind_dx + dy * downwind_dy
+                if dot > 0:
+                    val = min(1.0, val * stretch)
+                kernel[dy + half, dx + half] = val
 
-        structure = (kernel > 0.3).astype(int)
+        structure = (kernel > 0.15).astype(int)
         kernel = kernel / kernel.sum()
         neighbors = binary_dilation(burning, structure=structure)
 
